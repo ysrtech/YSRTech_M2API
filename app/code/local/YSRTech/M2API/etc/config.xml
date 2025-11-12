@@ -1,0 +1,68 @@
+<?xml version="1.0"?>
+<config>
+    <modules>
+        <YSRTech_M2API>
+            <version>1.0.0</version>
+        </YSRTech_M2API>
+    </modules>
+    <global>
+        <models>
+            <m2api>
+                <class>YSRTech_M2API_Model</class>
+                <resourceModel>m2api_resource</resourceModel>
+            </m2api>
+            <m2api_resource>
+                <class>YSRTech_M2API_Model_Resource</class>
+                <entities>
+                    <token>
+                        <table>m2api_token</table>
+                    </token>
+                </entities>
+            </m2api_resource>
+        </models>
+        <resources>
+            <m2api_setup>
+                <setup>
+                    <module>YSRTech_M2API</module>
+                    <class>YSRTech_M2API_Model_Resource_Setup</class>
+                </setup>
+            </m2api_setup>
+        </resources>
+        <helpers>
+            <m2api>
+                <class>YSRTech_M2API_Helper</class>
+            </m2api>
+        </helpers>
+        <blocks>
+            <m2api>
+                <class>YSRTech_M2API_Block</class>
+            </m2api>
+        </blocks>
+    </global>
+    
+    <!-- CHANGED: Use frontend router with before -->
+    <frontend>
+        <routers>
+            <m2api>
+                <use>standard</use>
+                <args>
+                    <module>YSRTech_M2API</module>
+                    <frontName>rest</frontName>
+                </args>
+            </m2api>
+        </routers>
+    </frontend>
+    
+    <!-- ALTERNATIVE: Also add admin router if frontend doesn't work -->
+    <admin>
+        <routers>
+            <m2api>
+                <use>admin</use>
+                <args>
+                    <module>YSRTech_M2API</module>
+                    <frontName>rest</frontName>
+                </args>
+            </m2api>
+        </routers>
+    </admin>
+</config>
