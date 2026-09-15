@@ -40,13 +40,20 @@ if (file_exists($configFile)) {
 // Test 3: Check required module files
 echo "\nTest 3: Checking core module files...\n";
 $requiredFiles = [
-    'Model/Token.php',
-    'Model/Resource/Token.php',
-    'Model/Resource/Token/Collection.php',
-    'Model/Resource/Setup.php',
+    'Model/Auth.php',
+    'Model/Apikey.php',
+    'Model/Resource/Apikey.php',
+    'Model/Resource/Apikey/Collection.php',
+    'Model/Observer.php',
     'Helper/Data.php',
-    'controllers/V1Controller.php',
-    'sql/m2api_setup/install-1.0.0.php'
+    'Controller/Router.php',
+    'Controller/AuctaneRouter.php',
+    'controllers/RestController.php',
+    'controllers/AuctaneController.php',
+    'controllers/Adminhtml/M2api/ApikeyController.php',
+    'etc/system.xml',
+    'etc/adminhtml.xml',
+    'sql/ysrtech_m2api_setup/install-0.2.0.php'
 ];
 
 $allFilesExist = true;
@@ -63,10 +70,12 @@ foreach ($requiredFiles as $file) {
 // Test 4: Basic PHP syntax check
 echo "\nTest 4: Checking PHP syntax...\n";
 $phpFiles = [
-    'Model/Token.php',
-    'Model/Resource/Token.php',
+    'Model/Auth.php',
+    'Model/Apikey.php',
     'Helper/Data.php',
-    'controllers/V1Controller.php'
+    'controllers/RestController.php',
+    'controllers/AuctaneController.php',
+    'controllers/Adminhtml/M2api/ApikeyController.php'
 ];
 
 $syntaxOk = true;
