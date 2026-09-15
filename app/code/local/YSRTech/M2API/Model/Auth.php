@@ -7,13 +7,13 @@
  *  - API keys ("m2api_..."), created in the admin panel under
  *    System > M2 API Keys. Long-lived, revocable, admin-level.
  *  - JWT-style tokens issued by the username/password endpoints. Short-lived,
- *    signed with a per-install secret generated at install time.
+ *    signed with a key derived from the install's crypt key.
  */
 class YSRTech_M2API_Model_Auth extends Mage_Core_Model_Abstract
 {
-    const SECRET_CONFIG_PATH    = 'ysrtech_m2api/auth/secret';
     const TOKEN_TTL_CONFIG_PATH = 'ysrtech_m2api/auth/token_ttl';
     const DEFAULT_TOKEN_TTL     = 86400;
+    const KEY_DERIVATION_CONTEXT = 'ysrtech_m2api/jwt';
 
     /**
      * Token format: base64url(header).base64url(payload).base64url(signature)
@@ -102,26 +102,19 @@ class YSRTech_M2API_Model_Auth extends Mage_Core_Model_Abstract
     }
 
     /**
-     * The install script seeds a random secret; this only regenerates one if
-     * an admin has blanked the config value.
+     * Signing key derived from the install's crypt key (app/etc/local.xml).
+     * Nothing to store or seed; rotating the crypt key via System > Manage
+     * Encryption Key invalidates outstanding tokens. Deriving rather than
+     * using the key raw keeps the signing bytes distinct from the
+     * encryption bytes.
      */
     protected function getSecret()
     {
-        $stored = Mage::getStoreConfig(self::SECRET_CONFIG_PATH);
-        $secret = $stored ? Mage::helper('core')->decrypt($stored) : '';
-        if ($secret === '') {
-            $secret = $this->regenerateSecret();
+        $cryptKey = (string)Mage::getConfig()->getNode('global/crypt/key');
+        if ($cryptKey === '') {
+            throw new Exception('Magento crypt key is not configured (app/etc/local.xml)');
         }
-        return $secret;
-    }
-
-    public function regenerateSecret()
-    {
-        $secret = bin2hex(random_bytes(32));
-        Mage::getConfig()->saveConfig(self::SECRET_CONFIG_PATH, Mage::helper('core')->encrypt($secret));
-        Mage::app()->cleanCache(array(Mage_Core_Model_Config::CACHE_TAG));
-        Mage::getConfig()->reinit();
-        return $secret;
+        return hash_hmac('sha256', self::KEY_DERIVATION_CONTEXT, $cryptKey);
     }
 
     protected function b64url($data)

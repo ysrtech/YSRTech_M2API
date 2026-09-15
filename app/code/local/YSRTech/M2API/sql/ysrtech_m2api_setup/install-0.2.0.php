@@ -55,11 +55,4 @@ $table = $installer->getConnection()
 
 $installer->getConnection()->createTable($table);
 
-// Seed a random signing secret for password-issued tokens so no install ever
-// runs on a shared/default secret.
-$installer->setConfigData(
-    'ysrtech_m2api/auth/secret',
-    Mage::helper('core')->encrypt(bin2hex(random_bytes(32)))
-);
-
 $installer->endSetup();

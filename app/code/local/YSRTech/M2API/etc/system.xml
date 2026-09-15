@@ -12,23 +12,13 @@
             <groups>
                 <auth translate="label comment" module="ysrtech_m2api">
                     <label>Authentication</label>
-                    <comment>Long-lived API keys for integrations (e.g. ShipStation) are managed under System &gt; M2 API Keys.</comment>
+                    <comment>Long-lived API keys for integrations (e.g. ShipStation) are managed under System &gt; M2 API Keys. Password-issued tokens are signed with a key derived from this install's encryption key; rotating it under System &gt; Manage Encryption Key invalidates outstanding tokens.</comment>
                     <frontend_type>text</frontend_type>
                     <sort_order>10</sort_order>
                     <show_in_default>1</show_in_default>
                     <show_in_website>0</show_in_website>
                     <show_in_store>0</show_in_store>
                     <fields>
-                        <secret translate="label comment" module="ysrtech_m2api">
-                            <label>Token Signing Secret</label>
-                            <frontend_type>obscure</frontend_type>
-                            <backend_model>adminhtml/system_config_backend_encrypted</backend_model>
-                            <comment>Signs the short-lived tokens issued by the username/password endpoints. Generated automatically on install. Changing it invalidates every token issued so far; API keys are not affected.</comment>
-                            <sort_order>10</sort_order>
-                            <show_in_default>1</show_in_default>
-                            <show_in_website>0</show_in_website>
-                            <show_in_store>0</show_in_store>
-                        </secret>
                         <token_ttl translate="label comment" module="ysrtech_m2api">
                             <label>Password Token Lifetime (seconds)</label>
                             <frontend_type>text</frontend_type>
