@@ -4,7 +4,9 @@ class YSRTech_M2API_Controller_Router extends Mage_Core_Controller_Varien_Router
 {
     public function match(Zend_Controller_Request_Http $request)
     {
-        // Log ALL requests to see what ShipStation is trying
+        // Optional request log (System > Configuration > M2 API > Logging).
+        // Note this fires for every request on the site, not just /rest/V1.
+        $helper = Mage::helper('ysrtech_m2api');
         $logEntry = array(
             'timestamp' => date('c'),
             'method' => $request->getMethod(),
@@ -24,13 +26,13 @@ class YSRTech_M2API_Controller_Router extends Mage_Core_Controller_Varien_Router
         $segments = explode('/', $path);
 
         if (count($segments) < 2 || $segments[0] !== 'rest' || $segments[1] !== 'V1') {
-            Mage::log(json_encode($logEntry, JSON_PRETTY_PRINT), null, 'm2api_all_requests.log', true);
+            $helper->log(json_encode($logEntry, JSON_PRETTY_PRINT), 'm2api_all_requests.log');
             return false;
         }
         
         $logEntry['matched'] = true;
         $logEntry['segments'] = $segments;
-        Mage::log(json_encode($logEntry, JSON_PRETTY_PRINT), null, 'm2api_all_requests.log', true);
+        $helper->log(json_encode($logEntry, JSON_PRETTY_PRINT), 'm2api_all_requests.log');
         
         $restPath = array_slice($segments, 2);
         

@@ -105,7 +105,7 @@ class YSRTech_M2API_AuctaneController extends Mage_Core_Controller_Front_Action
             )
         );
         
-        Mage::log(print_r($logData, true), null, 'm2api_auctane.log', true);
+        Mage::helper('ysrtech_m2api')->log(print_r($logData, true), 'm2api_auctane.log');
     }
     
     protected function exportAction()
@@ -247,7 +247,7 @@ class YSRTech_M2API_AuctaneController extends Mage_Core_Controller_Front_Action
     protected function shipNotifyAction()
     {
         $xmlString = $this->getRequest()->getRawBody();
-        Mage::log("shipNotify raw body: " . $xmlString, null, 'm2api_auctane.log', true);
+        Mage::helper('ysrtech_m2api')->log("shipNotify raw body: " . $xmlString, 'm2api_auctane.log');
 
         try {
             $xml = new SimpleXMLElement($xmlString);
@@ -302,11 +302,11 @@ class YSRTech_M2API_AuctaneController extends Mage_Core_Controller_Front_Action
             $canShip = $order->canShip();
             $existingShipments = $order->getShipmentsCollection()->getSize();
 
-            Mage::log(
+            Mage::helper('ysrtech_m2api')->log(
                 "shipNotify order={$orderNumber} canShip=" . ($canShip ? 'true' : 'false')
                 . " existingShipments={$existingShipments} qtyItems=" . count($qtys)
                 . " partial=" . (!empty($shippedSkus) ? 'true skus=' . json_encode($shippedSkus) : 'false'),
-                null, 'm2api_auctane.log', true
+                'm2api_auctane.log'
             );
 
             if ($canShip && !empty($qtys)) {
@@ -320,7 +320,7 @@ class YSRTech_M2API_AuctaneController extends Mage_Core_Controller_Front_Action
                         ->addObject($invoice)
                         ->addObject($invoice->getOrder())
                         ->save();
-                    Mage::log("shipNotify order={$orderNumber} partial invoice created offline capture qtys=" . json_encode($qtys), null, 'm2api_auctane.log', true);
+                    Mage::helper('ysrtech_m2api')->log("shipNotify order={$orderNumber} partial invoice created offline capture qtys=" . json_encode($qtys), 'm2api_auctane.log');
                 }
 
                 $shipment = Mage::getModel('sales/service_order', $order)->prepareShipment($qtys);
@@ -347,7 +347,7 @@ class YSRTech_M2API_AuctaneController extends Mage_Core_Controller_Front_Action
                         $remainingQty += max(0, $item->getQtyOrdered() - $item->getQtyShipped());
                     }
                 }
-                Mage::log("shipNotify order={$orderNumber} remainingQty={$remainingQty}", null, 'm2api_auctane.log', true);
+                Mage::helper('ysrtech_m2api')->log("shipNotify order={$orderNumber} remainingQty={$remainingQty}", 'm2api_auctane.log');
                 if ($remainingQty > 0) {
                     $order->setStatus('partially_shipped');
                     $order->addStatusHistoryComment('Order partially shipped by ShipStation', 'partially_shipped');
@@ -362,7 +362,7 @@ class YSRTech_M2API_AuctaneController extends Mage_Core_Controller_Front_Action
                     $shipment->sendEmail(true);
                 }
 
-                Mage::log("shipNotify order={$orderNumber} shipment created successfully, notifyCustomer=" . ($notifyCustomer ? 'true' : 'false'), null, 'm2api_auctane.log', true);
+                Mage::helper('ysrtech_m2api')->log("shipNotify order={$orderNumber} shipment created successfully, notifyCustomer=" . ($notifyCustomer ? 'true' : 'false'), 'm2api_auctane.log');
 
             } elseif ($existingShipments > 0) {
                 // Order already shipped â€” add tracking to existing shipment
@@ -376,10 +376,10 @@ class YSRTech_M2API_AuctaneController extends Mage_Core_Controller_Front_Action
                         ->setData('carrier_code', strtolower($carrier))
                         ->setData('order_id', $shipment->getData('order_id'))
                         ->save();
-                    Mage::log("shipNotify order={$orderNumber} tracking added to existing shipment", null, 'm2api_auctane.log', true);
+                    Mage::helper('ysrtech_m2api')->log("shipNotify order={$orderNumber} tracking added to existing shipment", 'm2api_auctane.log');
                 }
             } else {
-                Mage::log("shipNotify order={$orderNumber} SKIPPED: canShip={$canShip} qtys=" . json_encode($qtys), null, 'm2api_auctane.log', true);
+                Mage::helper('ysrtech_m2api')->log("shipNotify order={$orderNumber} SKIPPED: canShip={$canShip} qtys=" . json_encode($qtys), 'm2api_auctane.log');
                 throw new Exception("Cannot ship order {$orderNumber}: canShip=" . ($canShip ? 'true' : 'false') . ", shippable items=" . count($qtys));
             }
             

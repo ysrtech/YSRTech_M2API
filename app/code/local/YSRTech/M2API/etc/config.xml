@@ -89,6 +89,9 @@
             <auth>
                 <token_ttl>86400</token_ttl>
             </auth>
+            <logging>
+                <enabled>0</enabled>
+            </logging>
         </ysrtech_m2api>
     </default>
 </config>
