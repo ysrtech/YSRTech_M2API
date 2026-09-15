@@ -160,6 +160,19 @@ class YSRTech_M2API_RestController extends Mage_Core_Controller_Front_Action
             return $this->jsonError(400, 'Missing credentials');
         }
 
+        // Integrations whose setup form only has username/password fields
+        // (ClickShip, ShipStation, ...) can put an API key from
+        // System > M2 API Keys in the password field, with any username.
+        // The key is returned as the token, so revoking it takes effect
+        // immediately rather than after a JWT expires.
+        if (strpos($password, YSRTech_M2API_Model_Apikey::KEY_PREFIX) === 0) {
+            $result = Mage::getModel('ysrtech_m2api/auth')->validateToken($password);
+            if ($result && $result['type'] === 'admin' && !empty($result['api_key_id'])) {
+                return $this->json($password);
+            }
+            return $this->jsonError(401, 'Invalid credentials');
+        }
+
         try {
             /** @var Mage_Admin_Model_User $admin */
             $admin = Mage::getModel('admin/user');
