@@ -1,76 +1,89 @@
 <?php
+// app/code/local/YSRTech/M2API/Model/Adapter/Shipment.php
 
-class YSRTech_M2api_Model_Adapter_Shipment
+/**
+ * Magento\Sales\Api\Data\ShipmentInterface with items, tracks and comments.
+ */
+class YSRTech_M2API_Model_Adapter_Shipment extends YSRTech_M2API_Model_Adapter_Abstract
 {
     public function toArray(Mage_Sales_Model_Order_Shipment $shipment)
     {
+        $data = $this->export($shipment, $this->shipmentFields());
+
+        // M1 keeps these on the order; M2 denormalises them onto the shipment
+        $order = $shipment->getOrder();
+        if ($order) {
+            foreach (array('customer_id', 'billing_address_id', 'shipping_address_id') as $key) {
+                if (!isset($data[$key]) && $order->getData($key) !== null) {
+                    $data[$key] = (int)$order->getData($key);
+                }
+            }
+        }
+
         $items = array();
         foreach ($shipment->getAllItems() as $item) {
-            $items[] = $this->shipmentItemToArray($item);
+            $items[] = $this->export($item, $this->itemFields());
         }
+        $data['items'] = $items;
 
         $tracks = array();
         foreach ($shipment->getAllTracks() as $track) {
-            $tracks[] = $this->trackToArray($track);
+            $tracks[] = $this->export($track, $this->trackFields());
         }
+        $data['tracks'] = $tracks;
 
-        $order = $shipment->getOrder();
+        $comments = array();
+        foreach ($shipment->getCommentsCollection() as $comment) {
+            $comments[] = $this->export($comment, $this->commentFields());
+        }
+        $data['comments'] = $comments;
 
-        return array(
-            'entity_id' => (int)$shipment->getId(),
-            'increment_id' => $shipment->getIncrementId(),
-            'order_id' => (int)$shipment->getOrderId(),
-            'store_id' => (int)$shipment->getStoreId(),
-            'total_qty' => (float)$shipment->getTotalQty(),
-            'total_weight' => (float)$shipment->getTotalWeight(),
-            'created_at' => $shipment->getCreatedAt(),
-            'updated_at' => $shipment->getUpdatedAt(),
-            'customer_id' => (int)$order->getCustomerId(),
-            'billing_address_id' => (int)$order->getBillingAddressId(),
-            'shipping_address_id' => (int)$order->getShippingAddressId(),
-            'items' => $items,
-            'tracks' => $tracks,
-            'extension_attributes' => new stdClass()
-        );
+        return $data;
     }
 
-    protected function shipmentItemToArray(Mage_Sales_Model_Order_Shipment_Item $item)
-    {
-        return array(
-            'entity_id' => (int)$item->getId(),
-            'parent_id' => (int)$item->getParentId(),
-            'order_item_id' => (int)$item->getOrderItemId(),
-            'product_id' => (int)$item->getProductId(),
-            'sku' => $item->getSku(),
-            'name' => $item->getName(),
-            'price' => (float)$item->getPrice(),
-            'weight' => (float)$item->getWeight(),
-            'qty' => (float)$item->getQty()
-        );
-    }
-
-    protected function trackToArray(Mage_Sales_Model_Order_Shipment_Track $track)
-    {
-        return array(
-            'entity_id' => (int)$track->getId(),
-            'parent_id' => (int)$track->getParentId(),
-            'order_id' => (int)$track->getOrderId(),
-            'track_number' => $track->getTrackNumber(),
-            'title' => $track->getTitle(),
-            'carrier_code' => $track->getCarrierCode(),
-            'created_at' => $track->getCreatedAt(),
-            'updated_at' => $track->getUpdatedAt()
-        );
-    }
-
+    /**
+     * M2's GET /V1/shipments returns the full ShipmentInterface per row.
+     */
     public function toSimpleArray(Mage_Sales_Model_Order_Shipment $shipment)
     {
-        return array(
-            'entity_id' => (int)$shipment->getId(),
-            'increment_id' => $shipment->getIncrementId(),
-            'order_id' => (int)$shipment->getOrderId(),
-            'total_qty' => (float)$shipment->getTotalQty(),
-            'created_at' => $shipment->getCreatedAt()
+        return $this->toArray($shipment);
+    }
+
+    protected function shipmentFields()
+    {
+        return $this->typed(
+            array('increment_id', 'created_at', 'updated_at'),
+            array(
+                'entity_id', 'store_id', 'email_sent', 'order_id', 'customer_id', 'shipping_address_id',
+                'billing_address_id', 'shipment_status',
+            ),
+            array('total_weight', 'total_qty')
+        );
+    }
+
+    protected function itemFields()
+    {
+        return $this->typed(
+            array('additional_data', 'description', 'name', 'sku'),
+            array('entity_id', 'parent_id', 'product_id', 'order_item_id'),
+            array('row_total', 'price', 'weight', 'qty')
+        );
+    }
+
+    protected function trackFields()
+    {
+        return $this->typed(
+            array('track_number', 'description', 'title', 'carrier_code', 'created_at', 'updated_at'),
+            array('entity_id', 'parent_id', 'order_id'),
+            array('weight', 'qty')
+        );
+    }
+
+    protected function commentFields()
+    {
+        return $this->typed(
+            array('comment', 'created_at'),
+            array('entity_id', 'parent_id', 'is_customer_notified', 'is_visible_on_front')
         );
     }
 }

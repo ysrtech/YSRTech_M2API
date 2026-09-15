@@ -1,49 +1,99 @@
 <?php
-// app/code/local/YSRTech/M2api/Model/Auth.php
-class YSRTech_M2api_Model_Auth extends Mage_Core_Model_Abstract
-{
-    // Change this via system.xml later; for now hardcode a strong secret
-    const SECRET_CONFIG_PATH = 'ysrtech_m2api/auth/secret';
-    const DEFAULT_SECRET = 'change_me_to_a_long_random_secret';
+// app/code/local/YSRTech/M2API/Model/Auth.php
 
-    // Token format: base64url(header).base64url(payload).base64url(signature)
-    public function issueToken($userType, $userId, $ttlSeconds = 86400)
+/**
+ * Bearer-token authentication. Two kinds of token are accepted:
+ *
+ *  - API keys ("m2api_..."), created in the admin panel under
+ *    System > M2 API Keys. Long-lived, revocable, admin-level.
+ *  - JWT-style tokens issued by the username/password endpoints. Short-lived,
+ *    signed with a per-install secret generated at install time.
+ */
+class YSRTech_M2API_Model_Auth extends Mage_Core_Model_Abstract
+{
+    const SECRET_CONFIG_PATH    = 'ysrtech_m2api/auth/secret';
+    const TOKEN_TTL_CONFIG_PATH = 'ysrtech_m2api/auth/token_ttl';
+    const DEFAULT_TOKEN_TTL     = 86400;
+
+    /**
+     * Token format: base64url(header).base64url(payload).base64url(signature)
+     *
+     * @param string   $userType   admin|customer
+     * @param int      $userId
+     * @param int|null $ttlSeconds defaults to the configured lifetime
+     */
+    public function issueToken($userType, $userId, $ttlSeconds = null)
     {
+        if ($ttlSeconds === null) {
+            $ttlSeconds = (int)Mage::getStoreConfig(self::TOKEN_TTL_CONFIG_PATH);
+            if ($ttlSeconds <= 0) {
+                $ttlSeconds = self::DEFAULT_TOKEN_TTL;
+            }
+        }
+
         $now = time();
-        $payload = array(
+        $header = array(
             'typ' => 'JWT',
         );
         $claims = array(
             'sub' => (string)$userId,
-            'usr' => $userType,         // admin|customer
+            'usr' => $userType,
             'iat' => $now,
             'exp' => $now + $ttlSeconds,
             'ver' => '1.0',
         );
 
-        $secret = $this->getSecret();
-        $token = $this->encode($payload, $claims, $secret);
-        return $token;
+        return $this->encode($header, $claims, $this->getSecret());
     }
 
-    // Issue a long-lived token for integrations (10 years)
-    public function issueLongLivedToken($userType, $userId)
-    {
-        return $this->issueToken($userType, $userId, 315360000); // 10 years
-    }
-
+    /**
+     * @return array|false  ['user_id', 'type' (admin|customer), 'issued_at', 'expires_at', 'api_key_id'?]
+     */
     public function validateToken($token)
+    {
+        if (!is_string($token) || $token === '') {
+            return false;
+        }
+        if (strpos($token, YSRTech_M2API_Model_Apikey::KEY_PREFIX) === 0) {
+            return $this->validateApiKey($token);
+        }
+        return $this->validateJwt($token);
+    }
+
+    protected function validateApiKey($plain)
+    {
+        /** @var YSRTech_M2API_Model_Apikey $key */
+        $key = Mage::getModel('ysrtech_m2api/apikey')->loadByPlainKey($plain);
+        if (!$key->isUsable()) {
+            return false;
+        }
+        $key->touchLastUsed();
+
+        return array(
+            'user_id'    => (int)$key->getAdminUserId(),
+            'type'       => 'admin',
+            'api_key_id' => (int)$key->getId(),
+            'issued_at'  => strtotime($key->getCreatedAt() . ' UTC'),
+            'expires_at' => $key->getExpiresAt() ? strtotime($key->getExpiresAt() . ' UTC') : null,
+        );
+    }
+
+    protected function validateJwt($token)
     {
         try {
             list($header, $claims) = $this->decode($token, $this->getSecret());
-            if (!is_array($claims) || !isset($claims['exp']) || $claims['exp'] < time()) {
+            if (!is_array($claims)
+                || !isset($claims['exp'], $claims['sub'], $claims['usr'])
+                || $claims['exp'] < time()
+                || !in_array($claims['usr'], array('admin', 'customer'), true)
+            ) {
                 return false;
             }
             return array(
-                'user_id' => $claims['sub'],
-                'type' => $claims['usr'],
-                'issued_at' => $claims['iat'],
-                'expires_at' => $claims['exp']
+                'user_id'    => $claims['sub'],
+                'type'       => $claims['usr'],
+                'issued_at'  => isset($claims['iat']) ? $claims['iat'] : null,
+                'expires_at' => $claims['exp'],
             );
         } catch (Exception $e) {
             Mage::logException($e);
@@ -51,12 +101,26 @@ class YSRTech_M2api_Model_Auth extends Mage_Core_Model_Abstract
         }
     }
 
+    /**
+     * The install script seeds a random secret; this only regenerates one if
+     * an admin has blanked the config value.
+     */
     protected function getSecret()
     {
-        $secret = Mage::getStoreConfig(self::SECRET_CONFIG_PATH);
-        if (!$secret) {
-            $secret = self::DEFAULT_SECRET;
+        $stored = Mage::getStoreConfig(self::SECRET_CONFIG_PATH);
+        $secret = $stored ? Mage::helper('core')->decrypt($stored) : '';
+        if ($secret === '') {
+            $secret = $this->regenerateSecret();
         }
+        return $secret;
+    }
+
+    public function regenerateSecret()
+    {
+        $secret = bin2hex(random_bytes(32));
+        Mage::getConfig()->saveConfig(self::SECRET_CONFIG_PATH, Mage::helper('core')->encrypt($secret));
+        Mage::app()->cleanCache(array(Mage_Core_Model_Config::CACHE_TAG));
+        Mage::getConfig()->reinit();
         return $secret;
     }
 

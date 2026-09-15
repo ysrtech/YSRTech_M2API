@@ -1,6 +1,6 @@
 <?php
-// app/code/local/YSRTech/M2api/Model/Adapter/Store.php
-class YSRTech_M2api_Model_Adapter_Store
+// app/code/local/YSRTech/M2API/Model/Adapter/Store.php
+class YSRTech_M2API_Model_Adapter_Store
 {
     public function toArray(Mage_Core_Model_Store $store)
     {

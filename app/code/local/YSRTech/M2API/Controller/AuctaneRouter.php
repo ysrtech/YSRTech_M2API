@@ -1,6 +1,6 @@
 <?php
 
-class YSRTech_M2api_Controller_AuctaneRouter extends Mage_Core_Controller_Varien_Router_Abstract
+class YSRTech_M2API_Controller_AuctaneRouter extends Mage_Core_Controller_Varien_Router_Abstract
 {
     public function match(Zend_Controller_Request_Http $request)
     {
@@ -29,6 +29,6 @@ class YSRTech_M2api_Controller_AuctaneRouter extends Mage_Core_Controller_Varien
     
     protected function _getModuleFromConfig($moduleName)
     {
-        return 'YSRTech_M2api';
+        return 'YSRTech_M2API';
     }
 }

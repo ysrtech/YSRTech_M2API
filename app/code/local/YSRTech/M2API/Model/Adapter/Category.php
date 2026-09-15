@@ -1,6 +1,6 @@
 <?php
 
-class YSRTech_M2api_Model_Adapter_Category
+class YSRTech_M2API_Model_Adapter_Category
 {
     public function toArray(Mage_Catalog_Model_Category $category)
     {

@@ -1,6 +1,6 @@
 <?php
-// app/code/local/YSRTech/M2api/Helper/Data.php
-class YSRTech_M2api_Helper_Data extends Mage_Core_Helper_Abstract
+// app/code/local/YSRTech/M2API/Helper/Data.php
+class YSRTech_M2API_Helper_Data extends Mage_Core_Helper_Abstract
 {
     /**
      * Returns a direct tracking URL for the given carrier code and tracking number.

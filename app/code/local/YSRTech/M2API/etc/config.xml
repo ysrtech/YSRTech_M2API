@@ -1,20 +1,41 @@
 <?xml version="1.0"?>
 <config>
     <modules>
-        <YSRTech_M2api>
-            <version>0.1.0</version>
-        </YSRTech_M2api>
+        <YSRTech_M2API>
+            <version>0.2.0</version>
+        </YSRTech_M2API>
     </modules>
 
     <global>
         <models>
             <ysrtech_m2api>
-                <class>YSRTech_M2api_Model</class>
+                <class>YSRTech_M2API_Model</class>
+                <resourceModel>ysrtech_m2api_resource</resourceModel>
             </ysrtech_m2api>
+            <ysrtech_m2api_resource>
+                <class>YSRTech_M2API_Model_Resource</class>
+                <entities>
+                    <apikey>
+                        <table>m2api_api_key</table>
+                    </apikey>
+                </entities>
+            </ysrtech_m2api_resource>
         </models>
+        <resources>
+            <ysrtech_m2api_setup>
+                <setup>
+                    <module>YSRTech_M2API</module>
+                </setup>
+            </ysrtech_m2api_setup>
+        </resources>
+        <blocks>
+            <ysrtech_m2api>
+                <class>YSRTech_M2API_Block</class>
+            </ysrtech_m2api>
+        </blocks>
         <helpers>
             <ysrtech_m2api>
-                <class>YSRTech_M2api_Helper</class>
+                <class>YSRTech_M2API_Helper</class>
             </ysrtech_m2api>
         </helpers>
         <events>
@@ -29,15 +50,47 @@
         </events>
     </global>
 
+    <admin>
+        <routers>
+            <adminhtml>
+                <args>
+                    <modules>
+                        <ysrtech_m2api before="Mage_Adminhtml">YSRTech_M2API_Adminhtml</ysrtech_m2api>
+                    </modules>
+                </args>
+            </adminhtml>
+        </routers>
+    </admin>
+
+    <adminhtml>
+        <layout>
+            <updates>
+                <ysrtech_m2api>
+                    <file>ysrtech_m2api.xml</file>
+                </ysrtech_m2api>
+            </updates>
+        </layout>
+    </adminhtml>
+
     <frontend>
         <routers>
             <ysrtech_m2api>
                 <use>standard</use>
                 <args>
-                    <module>YSRTech_M2api</module>
+                    <module>YSRTech_M2API</module>
                     <frontName>ysrtech_m2api</frontName>
                 </args>
             </ysrtech_m2api>
         </routers>
     </frontend>
+
+    <default>
+        <ysrtech_m2api>
+            <auth>
+                <!-- Filled in by the install script; see Model/Auth.php -->
+                <secret></secret>
+                <token_ttl>86400</token_ttl>
+            </auth>
+        </ysrtech_m2api>
+    </default>
 </config>

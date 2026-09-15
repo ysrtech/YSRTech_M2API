@@ -1,0 +1,14 @@
+<?xml version="1.0"?>
+<layout version="0.1.0">
+    <adminhtml_m2api_apikey_index>
+        <reference name="content">
+            <block type="ysrtech_m2api/adminhtml_apikey" name="m2api_apikey" />
+        </reference>
+    </adminhtml_m2api_apikey_index>
+
+    <adminhtml_m2api_apikey_edit>
+        <reference name="content">
+            <block type="ysrtech_m2api/adminhtml_apikey_edit" name="m2api_apikey_edit" />
+        </reference>
+    </adminhtml_m2api_apikey_edit>
+</layout>

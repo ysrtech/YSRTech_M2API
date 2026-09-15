@@ -1,6 +1,6 @@
 <?php
 
-class YSRTech_M2api_AuctaneController extends Mage_Core_Controller_Front_Action
+class YSRTech_M2API_AuctaneController extends Mage_Core_Controller_Front_Action
 {
     public function preDispatch()
     {
@@ -365,7 +365,7 @@ class YSRTech_M2api_AuctaneController extends Mage_Core_Controller_Front_Action
                 Mage::log("shipNotify order={$orderNumber} shipment created successfully, notifyCustomer=" . ($notifyCustomer ? 'true' : 'false'), null, 'm2api_auctane.log', true);
 
             } elseif ($existingShipments > 0) {
-                // Order already shipped — add tracking to existing shipment
+                // Order already shipped â€” add tracking to existing shipment
                 $shipment = $order->getShipmentsCollection()->getFirstItem();
 
                 if ($trackingNumber) {

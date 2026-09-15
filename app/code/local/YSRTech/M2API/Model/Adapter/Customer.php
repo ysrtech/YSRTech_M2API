@@ -1,6 +1,6 @@
 <?php
 
-class YSRTech_M2api_Model_Adapter_Customer
+class YSRTech_M2API_Model_Adapter_Customer
 {
     public function toArray(Mage_Customer_Model_Customer $customer)
     {
