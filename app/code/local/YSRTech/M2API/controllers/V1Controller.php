@@ -583,7 +583,6 @@ class YSRTech_M2API_V1Controller extends Mage_Core_Controller_Front_Action
         }
     }
 
-    // Continued in next message...
     protected function _parseSearchCriteria()
     {
         $params = $this->getRequest()->getParams();
@@ -614,757 +613,752 @@ class YSRTech_M2API_V1Controller extends Mage_Core_Controller_Front_Action
 
         return $criteria;
     }
-    <?php
-// ============================================
-// Continuation of YSRTech_M2API_V1Controller
-// Add these methods to the V1Controller.php file
-// ============================================
 
-// CUSTOMER METHODS
+    // CUSTOMER METHODS
 
-protected function _getCustomers()
-{
-    $authData = $this->_validateAuth(true); // Require admin
-    if (!$authData) return;
+    protected function _getCustomers()
+    {
+        $authData = $this->_validateAuth(true); // Require admin
+        if (!$authData) return;
 
-    $searchCriteria = $this->_parseSearchCriteria();
+        $searchCriteria = $this->_parseSearchCriteria();
     
-    $collection = Mage::getModel('customer/customer')->getCollection()
-        ->addAttributeToSelect('*');
+        $collection = Mage::getModel('customer/customer')->getCollection()
+            ->addAttributeToSelect('*');
 
-    // Apply filters
-    if (isset($searchCriteria['filters'])) {
-        foreach ($searchCriteria['filters'] as $filter) {
-            $field = $filter['field'];
-            $value = $filter['value'];
-            $condition = isset($filter['condition_type']) ? $filter['condition_type'] : 'eq';
-            $collection->addAttributeToFilter($field, array($condition => $value));
-        }
-    }
-
-    // Apply pagination
-    $pageSize = isset($searchCriteria['page_size']) ? $searchCriteria['page_size'] : 20;
-    $currentPage = isset($searchCriteria['current_page']) ? $searchCriteria['current_page'] : 1;
-    
-    $collection->setPageSize($pageSize);
-    $collection->setCurPage($currentPage);
-
-    $items = array();
-    foreach ($collection as $customer) {
-        $items[] = $this->_helper->formatCustomer($customer);
-    }
-
-    $result = array(
-        'items' => $items,
-        'search_criteria' => $searchCriteria,
-        'total_count' => $collection->getSize()
-    );
-
-    $this->_helper->sendJsonResponse($result, 200);
-}
-
-protected function _getCustomer($customerId)
-{
-    $authData = $this->_validateAuth();
-    if (!$authData) return;
-
-    // Check if user can access this customer
-    if ($authData['type'] === 'customer' && $authData['customer_id'] != $customerId) {
-        $this->_helper->sendErrorResponse('Access denied', 403);
-        return;
-    }
-
-    $customer = Mage::getModel('customer/customer')->load($customerId);
-    
-    if (!$customer->getId()) {
-        $this->_helper->sendErrorResponse('Customer not found', 404);
-        return;
-    }
-
-    $this->_helper->sendJsonResponse($this->_helper->formatCustomer($customer), 200);
-}
-
-protected function _getCurrentCustomer()
-{
-    $authData = $this->_validateAuth();
-    if (!$authData) return;
-
-    if ($authData['type'] !== 'customer') {
-        $this->_helper->sendErrorResponse('Customer token required', 403);
-        return;
-    }
-
-    $customer = Mage::getModel('customer/customer')->load($authData['customer_id']);
-    
-    if (!$customer->getId()) {
-        $this->_helper->sendErrorResponse('Customer not found', 404);
-        return;
-    }
-
-    $this->_helper->sendJsonResponse($this->_helper->formatCustomer($customer), 200);
-}
-
-protected function _createCustomer()
-{
-    // Allow both authenticated and unauthenticated access for registration
-    $data = $this->_helper->getRequestBody();
-    
-    if (!isset($data['customer'])) {
-        $this->_helper->sendErrorResponse('Customer data is required', 400);
-        return;
-    }
-
-    $customerData = $data['customer'];
-
-    // Validate required fields
-    if (!isset($customerData['email']) || !isset($customerData['firstname']) || !isset($customerData['lastname'])) {
-        $this->_helper->sendErrorResponse('Email, firstname, and lastname are required', 400);
-        return;
-    }
-
-    try {
-        $customer = Mage::getModel('customer/customer');
-        $customer->setEmail($customerData['email']);
-        $customer->setFirstname($customerData['firstname']);
-        $customer->setLastname($customerData['lastname']);
-        
-        if (isset($customerData['website_id'])) {
-            $customer->setWebsiteId($customerData['website_id']);
-        } else {
-            $customer->setWebsiteId(Mage::app()->getWebsite()->getId());
-        }
-        
-        if (isset($customerData['store_id'])) {
-            $customer->setStoreId($customerData['store_id']);
-        } else {
-            $customer->setStoreId(Mage::app()->getStore()->getId());
-        }
-        
-        if (isset($customerData['group_id'])) {
-            $customer->setGroupId($customerData['group_id']);
-        }
-
-        // Set password if provided
-        if (isset($data['password'])) {
-            $customer->setPassword($data['password']);
-        }
-
-        $customer->save();
-
-        // Add addresses if provided
-        if (isset($customerData['addresses'])) {
-            foreach ($customerData['addresses'] as $addressData) {
-                $address = Mage::getModel('customer/address');
-                $address->setCustomerId($customer->getId());
-                
-                if (isset($addressData['firstname'])) $address->setFirstname($addressData['firstname']);
-                if (isset($addressData['lastname'])) $address->setLastname($addressData['lastname']);
-                if (isset($addressData['street'])) $address->setStreet($addressData['street']);
-                if (isset($addressData['city'])) $address->setCity($addressData['city']);
-                if (isset($addressData['country_id'])) $address->setCountryId($addressData['country_id']);
-                if (isset($addressData['region'])) {
-                    if (isset($addressData['region']['region_id'])) {
-                        $address->setRegionId($addressData['region']['region_id']);
-                    }
-                    if (isset($addressData['region']['region'])) {
-                        $address->setRegion($addressData['region']['region']);
-                    }
-                }
-                if (isset($addressData['postcode'])) $address->setPostcode($addressData['postcode']);
-                if (isset($addressData['telephone'])) $address->setTelephone($addressData['telephone']);
-                if (isset($addressData['default_billing'])) $address->setIsDefaultBilling($addressData['default_billing']);
-                if (isset($addressData['default_shipping'])) $address->setIsDefaultShipping($addressData['default_shipping']);
-                
-                $address->save();
+        // Apply filters
+        if (isset($searchCriteria['filters'])) {
+            foreach ($searchCriteria['filters'] as $filter) {
+                $field = $filter['field'];
+                $value = $filter['value'];
+                $condition = isset($filter['condition_type']) ? $filter['condition_type'] : 'eq';
+                $collection->addAttributeToFilter($field, array($condition => $value));
             }
         }
 
-        // Reload customer to get addresses
-        $customer = Mage::getModel('customer/customer')->load($customer->getId());
-        
-        $this->_helper->sendJsonResponse($this->_helper->formatCustomer($customer), 201);
-    } catch (Exception $e) {
-        Mage::logException($e);
-        $this->_helper->sendErrorResponse($e->getMessage(), 500);
-    }
-}
-
-protected function _updateCustomer($customerId)
-{
-    $authData = $this->_validateAuth();
-    if (!$authData) return;
-
-    // Check if user can update this customer
-    if ($authData['type'] === 'customer' && $authData['customer_id'] != $customerId) {
-        $this->_helper->sendErrorResponse('Access denied', 403);
-        return;
-    }
-
-    $customer = Mage::getModel('customer/customer')->load($customerId);
+        // Apply pagination
+        $pageSize = isset($searchCriteria['page_size']) ? $searchCriteria['page_size'] : 20;
+        $currentPage = isset($searchCriteria['current_page']) ? $searchCriteria['current_page'] : 1;
     
-    if (!$customer->getId()) {
-        $this->_helper->sendErrorResponse('Customer not found', 404);
-        return;
+        $collection->setPageSize($pageSize);
+        $collection->setCurPage($currentPage);
+
+        $items = array();
+        foreach ($collection as $customer) {
+            $items[] = $this->_helper->formatCustomer($customer);
+        }
+
+        $result = array(
+            'items' => $items,
+            'search_criteria' => $searchCriteria,
+            'total_count' => $collection->getSize()
+        );
+
+        $this->_helper->sendJsonResponse($result, 200);
     }
 
-    $data = $this->_helper->getRequestBody();
+    protected function _getCustomer($customerId)
+    {
+        $authData = $this->_validateAuth();
+        if (!$authData) return;
+
+        // Check if user can access this customer
+        if ($authData['type'] === 'customer' && $authData['customer_id'] != $customerId) {
+            $this->_helper->sendErrorResponse('Access denied', 403);
+            return;
+        }
+
+        $customer = Mage::getModel('customer/customer')->load($customerId);
     
-    if (!isset($data['customer'])) {
-        $this->_helper->sendErrorResponse('Customer data is required', 400);
-        return;
-    }
-
-    $customerData = $data['customer'];
-
-    try {
-        if (isset($customerData['email'])) $customer->setEmail($customerData['email']);
-        if (isset($customerData['firstname'])) $customer->setFirstname($customerData['firstname']);
-        if (isset($customerData['lastname'])) $customer->setLastname($customerData['lastname']);
-        if (isset($customerData['group_id'])) $customer->setGroupId($customerData['group_id']);
-        
-        $customer->save();
+        if (!$customer->getId()) {
+            $this->_helper->sendErrorResponse('Customer not found', 404);
+            return;
+        }
 
         $this->_helper->sendJsonResponse($this->_helper->formatCustomer($customer), 200);
-    } catch (Exception $e) {
-        Mage::logException($e);
-        $this->_helper->sendErrorResponse($e->getMessage(), 500);
-    }
-}
-
-protected function _deleteCustomer($customerId)
-{
-    $authData = $this->_validateAuth(true); // Require admin
-    if (!$authData) return;
-
-    $customer = Mage::getModel('customer/customer')->load($customerId);
-    
-    if (!$customer->getId()) {
-        $this->_helper->sendErrorResponse('Customer not found', 404);
-        return;
     }
 
-    try {
-        $customer->delete();
-        $this->_helper->sendJsonResponse(true, 200);
-    } catch (Exception $e) {
-        Mage::logException($e);
-        $this->_helper->sendErrorResponse($e->getMessage(), 500);
-    }
-}
+    protected function _getCurrentCustomer()
+    {
+        $authData = $this->_validateAuth();
+        if (!$authData) return;
 
-// ORDER METHODS
-
-protected function _getOrders()
-{
-    $authData = $this->_validateAuth();
-    if (!$authData) return;
-
-    $searchCriteria = $this->_parseSearchCriteria();
-    
-    $collection = Mage::getModel('sales/order')->getCollection();
-
-    // If customer token, filter by customer
-    if ($authData['type'] === 'customer') {
-        $collection->addFieldToFilter('customer_id', $authData['customer_id']);
-    }
-
-    // Apply filters
-    if (isset($searchCriteria['filters'])) {
-        foreach ($searchCriteria['filters'] as $filter) {
-            $field = $filter['field'];
-            $value = $filter['value'];
-            $condition = isset($filter['condition_type']) ? $filter['condition_type'] : 'eq';
-            $collection->addFieldToFilter($field, array($condition => $value));
-        }
-    }
-
-    // Apply pagination
-    $pageSize = isset($searchCriteria['page_size']) ? $searchCriteria['page_size'] : 20;
-    $currentPage = isset($searchCriteria['current_page']) ? $searchCriteria['current_page'] : 1;
-    
-    $collection->setPageSize($pageSize);
-    $collection->setCurPage($currentPage);
-
-    $items = array();
-    foreach ($collection as $order) {
-        $items[] = $this->_helper->formatOrder($order);
-    }
-
-    $result = array(
-        'items' => $items,
-        'search_criteria' => $searchCriteria,
-        'total_count' => $collection->getSize()
-    );
-
-    $this->_helper->sendJsonResponse($result, 200);
-}
-
-protected function _getOrder($orderId)
-{
-    $authData = $this->_validateAuth();
-    if (!$authData) return;
-
-    $order = Mage::getModel('sales/order')->load($orderId);
-    
-    if (!$order->getId()) {
-        $this->_helper->sendErrorResponse('Order not found', 404);
-        return;
-    }
-
-    // Check if customer can access this order
-    if ($authData['type'] === 'customer' && $order->getCustomerId() != $authData['customer_id']) {
-        $this->_helper->sendErrorResponse('Access denied', 403);
-        return;
-    }
-
-    $this->_helper->sendJsonResponse($this->_helper->formatOrder($order), 200);
-}
-
-// INVOICE METHODS
-
-protected function _getInvoices()
-{
-    $authData = $this->_validateAuth(true); // Require admin
-    if (!$authData) return;
-
-    $searchCriteria = $this->_parseSearchCriteria();
-    
-    $collection = Mage::getModel('sales/order_invoice')->getCollection();
-
-    // Apply filters
-    if (isset($searchCriteria['filters'])) {
-        foreach ($searchCriteria['filters'] as $filter) {
-            $field = $filter['field'];
-            $value = $filter['value'];
-            $condition = isset($filter['condition_type']) ? $filter['condition_type'] : 'eq';
-            $collection->addFieldToFilter($field, array($condition => $value));
-        }
-    }
-
-    // Apply pagination
-    $pageSize = isset($searchCriteria['page_size']) ? $searchCriteria['page_size'] : 20;
-    $currentPage = isset($searchCriteria['current_page']) ? $searchCriteria['current_page'] : 1;
-    
-    $collection->setPageSize($pageSize);
-    $collection->setCurPage($currentPage);
-
-    $items = array();
-    foreach ($collection as $invoice) {
-        $items[] = $this->_formatInvoice($invoice);
-    }
-
-    $result = array(
-        'items' => $items,
-        'search_criteria' => $searchCriteria,
-        'total_count' => $collection->getSize()
-    );
-
-    $this->_helper->sendJsonResponse($result, 200);
-}
-
-protected function _getInvoice($invoiceId)
-{
-    $authData = $this->_validateAuth(true);
-    if (!$authData) return;
-
-    $invoice = Mage::getModel('sales/order_invoice')->load($invoiceId);
-    
-    if (!$invoice->getId()) {
-        $this->_helper->sendErrorResponse('Invoice not found', 404);
-        return;
-    }
-
-    $this->_helper->sendJsonResponse($this->_formatInvoice($invoice), 200);
-}
-
-protected function _createInvoice()
-{
-    $authData = $this->_validateAuth(true);
-    if (!$authData) return;
-
-    $data = $this->_helper->getRequestBody();
-    
-    if (!isset($data['orderId'])) {
-        $this->_helper->sendErrorResponse('Order ID is required', 400);
-        return;
-    }
-
-    try {
-        $order = Mage::getModel('sales/order')->load($data['orderId']);
-        
-        if (!$order->getId()) {
-            $this->_helper->sendErrorResponse('Order not found', 404);
+        if ($authData['type'] !== 'customer') {
+            $this->_helper->sendErrorResponse('Customer token required', 403);
             return;
         }
 
-        if (!$order->canInvoice()) {
-            $this->_helper->sendErrorResponse('Cannot create invoice for this order', 400);
+        $customer = Mage::getModel('customer/customer')->load($authData['customer_id']);
+    
+        if (!$customer->getId()) {
+            $this->_helper->sendErrorResponse('Customer not found', 404);
             return;
         }
 
-        $invoice = Mage::getModel('sales/service_order', $order)->prepareInvoice();
-        
-        if (isset($data['capture']) && $data['capture']) {
-            $invoice->setRequestedCaptureCase(Mage_Sales_Model_Order_Invoice::CAPTURE_ONLINE);
-        } else {
-            $invoice->setRequestedCaptureCase(Mage_Sales_Model_Order_Invoice::NOT_CAPTURE);
-        }
-
-        $invoice->register();
-        
-        $transactionSave = Mage::getModel('core/resource_transaction')
-            ->addObject($invoice)
-            ->addObject($invoice->getOrder());
-        
-        $transactionSave->save();
-
-        $this->_helper->sendJsonResponse($this->_formatInvoice($invoice), 201);
-    } catch (Exception $e) {
-        Mage::logException($e);
-        $this->_helper->sendErrorResponse($e->getMessage(), 500);
-    }
-}
-
-protected function _formatInvoice($invoice)
-{
-    $data = array(
-        'entity_id' => (int)$invoice->getId(),
-        'increment_id' => $invoice->getIncrementId(),
-        'order_id' => (int)$invoice->getOrderId(),
-        'state' => (int)$invoice->getState(),
-        'store_id' => (int)$invoice->getStoreId(),
-        'grand_total' => (float)$invoice->getGrandTotal(),
-        'base_grand_total' => (float)$invoice->getBaseGrandTotal(),
-        'subtotal' => (float)$invoice->getSubtotal(),
-        'base_subtotal' => (float)$invoice->getBaseSubtotal(),
-        'created_at' => $invoice->getCreatedAt(),
-        'updated_at' => $invoice->getUpdatedAt(),
-        'items' => array()
-    );
-
-    foreach ($invoice->getAllItems() as $item) {
-        $data['items'][] = array(
-            'entity_id' => (int)$item->getId(),
-            'order_item_id' => (int)$item->getOrderItemId(),
-            'sku' => $item->getSku(),
-            'name' => $item->getName(),
-            'price' => (float)$item->getPrice(),
-            'qty' => (float)$item->getQty(),
-            'row_total' => (float)$item->getRowTotal()
-        );
+        $this->_helper->sendJsonResponse($this->_helper->formatCustomer($customer), 200);
     }
 
-    return $data;
-}
-
-// SHIPMENT METHODS
-
-protected function _getShipments()
-{
-    $authData = $this->_validateAuth(true);
-    if (!$authData) return;
-
-    $searchCriteria = $this->_parseSearchCriteria();
+    protected function _createCustomer()
+    {
+        // Allow both authenticated and unauthenticated access for registration
+        $data = $this->_helper->getRequestBody();
     
-    $collection = Mage::getModel('sales/order_shipment')->getCollection();
-
-    // Apply filters
-    if (isset($searchCriteria['filters'])) {
-        foreach ($searchCriteria['filters'] as $filter) {
-            $field = $filter['field'];
-            $value = $filter['value'];
-            $condition = isset($filter['condition_type']) ? $filter['condition_type'] : 'eq';
-            $collection->addFieldToFilter($field, array($condition => $value));
-        }
-    }
-
-    // Apply pagination
-    $pageSize = isset($searchCriteria['page_size']) ? $searchCriteria['page_size'] : 20;
-    $currentPage = isset($searchCriteria['current_page']) ? $searchCriteria['current_page'] : 1;
-    
-    $collection->setPageSize($pageSize);
-    $collection->setCurPage($currentPage);
-
-    $items = array();
-    foreach ($collection as $shipment) {
-        $items[] = $this->_formatShipment($shipment);
-    }
-
-    $result = array(
-        'items' => $items,
-        'search_criteria' => $searchCriteria,
-        'total_count' => $collection->getSize()
-    );
-
-    $this->_helper->sendJsonResponse($result, 200);
-}
-
-protected function _getShipment($shipmentId)
-{
-    $authData = $this->_validateAuth(true);
-    if (!$authData) return;
-
-    $shipment = Mage::getModel('sales/order_shipment')->load($shipmentId);
-    
-    if (!$shipment->getId()) {
-        $this->_helper->sendErrorResponse('Shipment not found', 404);
-        return;
-    }
-
-    $this->_helper->sendJsonResponse($this->_formatShipment($shipment), 200);
-}
-
-protected function _createShipment()
-{
-    $authData = $this->_validateAuth(true);
-    if (!$authData) return;
-
-    $data = $this->_helper->getRequestBody();
-    
-    if (!isset($data['orderId'])) {
-        $this->_helper->sendErrorResponse('Order ID is required', 400);
-        return;
-    }
-
-    try {
-        $order = Mage::getModel('sales/order')->load($data['orderId']);
-        
-        if (!$order->getId()) {
-            $this->_helper->sendErrorResponse('Order not found', 404);
+        if (!isset($data['customer'])) {
+            $this->_helper->sendErrorResponse('Customer data is required', 400);
             return;
         }
 
-        if (!$order->canShip()) {
-            $this->_helper->sendErrorResponse('Cannot create shipment for this order', 400);
+        $customerData = $data['customer'];
+
+        // Validate required fields
+        if (!isset($customerData['email']) || !isset($customerData['firstname']) || !isset($customerData['lastname'])) {
+            $this->_helper->sendErrorResponse('Email, firstname, and lastname are required', 400);
             return;
         }
 
-        $shipment = Mage::getModel('sales/service_order', $order)->prepareShipment();
-        $shipment->register();
+        try {
+            $customer = Mage::getModel('customer/customer');
+            $customer->setEmail($customerData['email']);
+            $customer->setFirstname($customerData['firstname']);
+            $customer->setLastname($customerData['lastname']);
         
-        // Add tracking if provided
-        if (isset($data['tracks']) && is_array($data['tracks'])) {
-            foreach ($data['tracks'] as $trackData) {
-                $track = Mage::getModel('sales/order_shipment_track')
-                    ->setNumber($trackData['track_number'])
-                    ->setCarrierCode($trackData['carrier_code'])
-                    ->setTitle($trackData['title']);
-                $shipment->addTrack($track);
+            if (isset($customerData['website_id'])) {
+                $customer->setWebsiteId($customerData['website_id']);
+            } else {
+                $customer->setWebsiteId(Mage::app()->getWebsite()->getId());
+            }
+        
+            if (isset($customerData['store_id'])) {
+                $customer->setStoreId($customerData['store_id']);
+            } else {
+                $customer->setStoreId(Mage::app()->getStore()->getId());
+            }
+        
+            if (isset($customerData['group_id'])) {
+                $customer->setGroupId($customerData['group_id']);
+            }
+
+            // Set password if provided
+            if (isset($data['password'])) {
+                $customer->setPassword($data['password']);
+            }
+
+            $customer->save();
+
+            // Add addresses if provided
+            if (isset($customerData['addresses'])) {
+                foreach ($customerData['addresses'] as $addressData) {
+                    $address = Mage::getModel('customer/address');
+                    $address->setCustomerId($customer->getId());
+                
+                    if (isset($addressData['firstname'])) $address->setFirstname($addressData['firstname']);
+                    if (isset($addressData['lastname'])) $address->setLastname($addressData['lastname']);
+                    if (isset($addressData['street'])) $address->setStreet($addressData['street']);
+                    if (isset($addressData['city'])) $address->setCity($addressData['city']);
+                    if (isset($addressData['country_id'])) $address->setCountryId($addressData['country_id']);
+                    if (isset($addressData['region'])) {
+                        if (isset($addressData['region']['region_id'])) {
+                            $address->setRegionId($addressData['region']['region_id']);
+                        }
+                        if (isset($addressData['region']['region'])) {
+                            $address->setRegion($addressData['region']['region']);
+                        }
+                    }
+                    if (isset($addressData['postcode'])) $address->setPostcode($addressData['postcode']);
+                    if (isset($addressData['telephone'])) $address->setTelephone($addressData['telephone']);
+                    if (isset($addressData['default_billing'])) $address->setIsDefaultBilling($addressData['default_billing']);
+                    if (isset($addressData['default_shipping'])) $address->setIsDefaultShipping($addressData['default_shipping']);
+                
+                    $address->save();
+                }
+            }
+
+            // Reload customer to get addresses
+            $customer = Mage::getModel('customer/customer')->load($customer->getId());
+        
+            $this->_helper->sendJsonResponse($this->_helper->formatCustomer($customer), 201);
+        } catch (Exception $e) {
+            Mage::logException($e);
+            $this->_helper->sendErrorResponse($e->getMessage(), 500);
+        }
+    }
+
+    protected function _updateCustomer($customerId)
+    {
+        $authData = $this->_validateAuth();
+        if (!$authData) return;
+
+        // Check if user can update this customer
+        if ($authData['type'] === 'customer' && $authData['customer_id'] != $customerId) {
+            $this->_helper->sendErrorResponse('Access denied', 403);
+            return;
+        }
+
+        $customer = Mage::getModel('customer/customer')->load($customerId);
+    
+        if (!$customer->getId()) {
+            $this->_helper->sendErrorResponse('Customer not found', 404);
+            return;
+        }
+
+        $data = $this->_helper->getRequestBody();
+    
+        if (!isset($data['customer'])) {
+            $this->_helper->sendErrorResponse('Customer data is required', 400);
+            return;
+        }
+
+        $customerData = $data['customer'];
+
+        try {
+            if (isset($customerData['email'])) $customer->setEmail($customerData['email']);
+            if (isset($customerData['firstname'])) $customer->setFirstname($customerData['firstname']);
+            if (isset($customerData['lastname'])) $customer->setLastname($customerData['lastname']);
+            if (isset($customerData['group_id'])) $customer->setGroupId($customerData['group_id']);
+        
+            $customer->save();
+
+            $this->_helper->sendJsonResponse($this->_helper->formatCustomer($customer), 200);
+        } catch (Exception $e) {
+            Mage::logException($e);
+            $this->_helper->sendErrorResponse($e->getMessage(), 500);
+        }
+    }
+
+    protected function _deleteCustomer($customerId)
+    {
+        $authData = $this->_validateAuth(true); // Require admin
+        if (!$authData) return;
+
+        $customer = Mage::getModel('customer/customer')->load($customerId);
+    
+        if (!$customer->getId()) {
+            $this->_helper->sendErrorResponse('Customer not found', 404);
+            return;
+        }
+
+        try {
+            $customer->delete();
+            $this->_helper->sendJsonResponse(true, 200);
+        } catch (Exception $e) {
+            Mage::logException($e);
+            $this->_helper->sendErrorResponse($e->getMessage(), 500);
+        }
+    }
+
+    // ORDER METHODS
+
+    protected function _getOrders()
+    {
+        $authData = $this->_validateAuth();
+        if (!$authData) return;
+
+        $searchCriteria = $this->_parseSearchCriteria();
+    
+        $collection = Mage::getModel('sales/order')->getCollection();
+
+        // If customer token, filter by customer
+        if ($authData['type'] === 'customer') {
+            $collection->addFieldToFilter('customer_id', $authData['customer_id']);
+        }
+
+        // Apply filters
+        if (isset($searchCriteria['filters'])) {
+            foreach ($searchCriteria['filters'] as $filter) {
+                $field = $filter['field'];
+                $value = $filter['value'];
+                $condition = isset($filter['condition_type']) ? $filter['condition_type'] : 'eq';
+                $collection->addFieldToFilter($field, array($condition => $value));
             }
         }
-        
-        $transactionSave = Mage::getModel('core/resource_transaction')
-            ->addObject($shipment)
-            ->addObject($shipment->getOrder())
-            ->save();
 
-        $this->_helper->sendJsonResponse($this->_formatShipment($shipment), 201);
-    } catch (Exception $e) {
-        Mage::logException($e);
-        $this->_helper->sendErrorResponse($e->getMessage(), 500);
-    }
-}
-
-protected function _formatShipment($shipment)
-{
-    $data = array(
-        'entity_id' => (int)$shipment->getId(),
-        'increment_id' => $shipment->getIncrementId(),
-        'order_id' => (int)$shipment->getOrderId(),
-        'store_id' => (int)$shipment->getStoreId(),
-        'total_qty' => (float)$shipment->getTotalQty(),
-        'created_at' => $shipment->getCreatedAt(),
-        'updated_at' => $shipment->getUpdatedAt(),
-        'items' => array(),
-        'tracks' => array()
-    );
-
-    foreach ($shipment->getAllItems() as $item) {
-        $data['items'][] = array(
-            'entity_id' => (int)$item->getId(),
-            'order_item_id' => (int)$item->getOrderItemId(),
-            'sku' => $item->getSku(),
-            'name' => $item->getName(),
-            'qty' => (float)$item->getQty()
-        );
-    }
-
-    foreach ($shipment->getAllTracks() as $track) {
-        $data['tracks'][] = array(
-            'entity_id' => (int)$track->getId(),
-            'track_number' => $track->getNumber(),
-            'carrier_code' => $track->getCarrierCode(),
-            'title' => $track->getTitle()
-        );
-    }
-
-    return $data;
-}
-
-// CATEGORY METHODS
-
-protected function _getCategories()
-{
-    $authData = $this->_validateAuth();
-    if (!$authData) return;
-
-    $searchCriteria = $this->_parseSearchCriteria();
+        // Apply pagination
+        $pageSize = isset($searchCriteria['page_size']) ? $searchCriteria['page_size'] : 20;
+        $currentPage = isset($searchCriteria['current_page']) ? $searchCriteria['current_page'] : 1;
     
-    $collection = Mage::getModel('catalog/category')->getCollection()
-        ->addAttributeToSelect('*');
+        $collection->setPageSize($pageSize);
+        $collection->setCurPage($currentPage);
 
-    // Apply filters
-    if (isset($searchCriteria['filters'])) {
-        foreach ($searchCriteria['filters'] as $filter) {
-            $field = $filter['field'];
-            $value = $filter['value'];
-            $condition = isset($filter['condition_type']) ? $filter['condition_type'] : 'eq';
-            $collection->addAttributeToFilter($field, array($condition => $value));
+        $items = array();
+        foreach ($collection as $order) {
+            $items[] = $this->_helper->formatOrder($order);
+        }
+
+        $result = array(
+            'items' => $items,
+            'search_criteria' => $searchCriteria,
+            'total_count' => $collection->getSize()
+        );
+
+        $this->_helper->sendJsonResponse($result, 200);
+    }
+
+    protected function _getOrder($orderId)
+    {
+        $authData = $this->_validateAuth();
+        if (!$authData) return;
+
+        $order = Mage::getModel('sales/order')->load($orderId);
+    
+        if (!$order->getId()) {
+            $this->_helper->sendErrorResponse('Order not found', 404);
+            return;
+        }
+
+        // Check if customer can access this order
+        if ($authData['type'] === 'customer' && $order->getCustomerId() != $authData['customer_id']) {
+            $this->_helper->sendErrorResponse('Access denied', 403);
+            return;
+        }
+
+        $this->_helper->sendJsonResponse($this->_helper->formatOrder($order), 200);
+    }
+
+    // INVOICE METHODS
+
+    protected function _getInvoices()
+    {
+        $authData = $this->_validateAuth(true); // Require admin
+        if (!$authData) return;
+
+        $searchCriteria = $this->_parseSearchCriteria();
+    
+        $collection = Mage::getModel('sales/order_invoice')->getCollection();
+
+        // Apply filters
+        if (isset($searchCriteria['filters'])) {
+            foreach ($searchCriteria['filters'] as $filter) {
+                $field = $filter['field'];
+                $value = $filter['value'];
+                $condition = isset($filter['condition_type']) ? $filter['condition_type'] : 'eq';
+                $collection->addFieldToFilter($field, array($condition => $value));
+            }
+        }
+
+        // Apply pagination
+        $pageSize = isset($searchCriteria['page_size']) ? $searchCriteria['page_size'] : 20;
+        $currentPage = isset($searchCriteria['current_page']) ? $searchCriteria['current_page'] : 1;
+    
+        $collection->setPageSize($pageSize);
+        $collection->setCurPage($currentPage);
+
+        $items = array();
+        foreach ($collection as $invoice) {
+            $items[] = $this->_formatInvoice($invoice);
+        }
+
+        $result = array(
+            'items' => $items,
+            'search_criteria' => $searchCriteria,
+            'total_count' => $collection->getSize()
+        );
+
+        $this->_helper->sendJsonResponse($result, 200);
+    }
+
+    protected function _getInvoice($invoiceId)
+    {
+        $authData = $this->_validateAuth(true);
+        if (!$authData) return;
+
+        $invoice = Mage::getModel('sales/order_invoice')->load($invoiceId);
+    
+        if (!$invoice->getId()) {
+            $this->_helper->sendErrorResponse('Invoice not found', 404);
+            return;
+        }
+
+        $this->_helper->sendJsonResponse($this->_formatInvoice($invoice), 200);
+    }
+
+    protected function _createInvoice()
+    {
+        $authData = $this->_validateAuth(true);
+        if (!$authData) return;
+
+        $data = $this->_helper->getRequestBody();
+    
+        if (!isset($data['orderId'])) {
+            $this->_helper->sendErrorResponse('Order ID is required', 400);
+            return;
+        }
+
+        try {
+            $order = Mage::getModel('sales/order')->load($data['orderId']);
+        
+            if (!$order->getId()) {
+                $this->_helper->sendErrorResponse('Order not found', 404);
+                return;
+            }
+
+            if (!$order->canInvoice()) {
+                $this->_helper->sendErrorResponse('Cannot create invoice for this order', 400);
+                return;
+            }
+
+            $invoice = Mage::getModel('sales/service_order', $order)->prepareInvoice();
+        
+            if (isset($data['capture']) && $data['capture']) {
+                $invoice->setRequestedCaptureCase(Mage_Sales_Model_Order_Invoice::CAPTURE_ONLINE);
+            } else {
+                $invoice->setRequestedCaptureCase(Mage_Sales_Model_Order_Invoice::NOT_CAPTURE);
+            }
+
+            $invoice->register();
+        
+            $transactionSave = Mage::getModel('core/resource_transaction')
+                ->addObject($invoice)
+                ->addObject($invoice->getOrder());
+        
+            $transactionSave->save();
+
+            $this->_helper->sendJsonResponse($this->_formatInvoice($invoice), 201);
+        } catch (Exception $e) {
+            Mage::logException($e);
+            $this->_helper->sendErrorResponse($e->getMessage(), 500);
         }
     }
 
-    // Apply pagination
-    $pageSize = isset($searchCriteria['page_size']) ? $searchCriteria['page_size'] : 20;
-    $currentPage = isset($searchCriteria['current_page']) ? $searchCriteria['current_page'] : 1;
-    
-    $collection->setPageSize($pageSize);
-    $collection->setCurPage($currentPage);
+    protected function _formatInvoice($invoice)
+    {
+        $data = array(
+            'entity_id' => (int)$invoice->getId(),
+            'increment_id' => $invoice->getIncrementId(),
+            'order_id' => (int)$invoice->getOrderId(),
+            'state' => (int)$invoice->getState(),
+            'store_id' => (int)$invoice->getStoreId(),
+            'grand_total' => (float)$invoice->getGrandTotal(),
+            'base_grand_total' => (float)$invoice->getBaseGrandTotal(),
+            'subtotal' => (float)$invoice->getSubtotal(),
+            'base_subtotal' => (float)$invoice->getBaseSubtotal(),
+            'created_at' => $invoice->getCreatedAt(),
+            'updated_at' => $invoice->getUpdatedAt(),
+            'items' => array()
+        );
 
-    $items = array();
-    foreach ($collection as $category) {
-        $items[] = $this->_formatCategory($category);
-    }
-
-    $result = array(
-        'items' => $items,
-        'search_criteria' => $searchCriteria,
-        'total_count' => $collection->getSize()
-    );
-
-    $this->_helper->sendJsonResponse($result, 200);
-}
-
-protected function _getCategory($categoryId)
-{
-    $authData = $this->_validateAuth();
-    if (!$authData) return;
-
-    $category = Mage::getModel('catalog/category')->load($categoryId);
-    
-    if (!$category->getId()) {
-        $this->_helper->sendErrorResponse('Category not found', 404);
-        return;
-    }
-
-    $this->_helper->sendJsonResponse($this->_formatCategory($category), 200);
-}
-
-protected function _formatCategory($category)
-{
-    return array(
-        'id' => (int)$category->getId(),
-        'parent_id' => (int)$category->getParentId(),
-        'name' => $category->getName(),
-        'is_active' => (bool)$category->getIsActive(),
-        'position' => (int)$category->getPosition(),
-        'level' => (int)$category->getLevel(),
-        'children' => $category->getChildren(),
-        'created_at' => $category->getCreatedAt(),
-        'updated_at' => $category->getUpdatedAt(),
-        'path' => $category->getPath(),
-        'include_in_menu' => (bool)$category->getIncludeInMenu(),
-        'custom_attributes' => array()
-    );
-}
-
-protected function _createCategory()
-{
-    $authData = $this->_validateAuth(true);
-    if (!$authData) return;
-
-    $data = $this->_helper->getRequestBody();
-    
-    if (!isset($data['category'])) {
-        $this->_helper->sendErrorResponse('Category data is required', 400);
-        return;
-    }
-
-    $categoryData = $data['category'];
-
-    try {
-        $category = Mage::getModel('catalog/category');
-        $category->setName($categoryData['name']);
-        $category->setIsActive(isset($categoryData['is_active']) ? $categoryData['is_active'] : 1);
-        $category->setParentId(isset($categoryData['parent_id']) ? $categoryData['parent_id'] : 2);
-        $category->setIncludeInMenu(isset($categoryData['include_in_menu']) ? $categoryData['include_in_menu'] : 1);
-        
-        if (isset($categoryData['position'])) {
-            $category->setPosition($categoryData['position']);
+        foreach ($invoice->getAllItems() as $item) {
+            $data['items'][] = array(
+                'entity_id' => (int)$item->getId(),
+                'order_item_id' => (int)$item->getOrderItemId(),
+                'sku' => $item->getSku(),
+                'name' => $item->getName(),
+                'price' => (float)$item->getPrice(),
+                'qty' => (float)$item->getQty(),
+                'row_total' => (float)$item->getRowTotal()
+            );
         }
-        
-        $category->save();
 
-        $this->_helper->sendJsonResponse($this->_formatCategory($category), 201);
-    } catch (Exception $e) {
-        Mage::logException($e);
-        $this->_helper->sendErrorResponse($e->getMessage(), 500);
+        return $data;
     }
-}
 
-protected function _updateCategory($categoryId)
-{
-    $authData = $this->_validateAuth(true);
-    if (!$authData) return;
+    // SHIPMENT METHODS
 
-    $category = Mage::getModel('catalog/category')->load($categoryId);
+    protected function _getShipments()
+    {
+        $authData = $this->_validateAuth(true);
+        if (!$authData) return;
+
+        $searchCriteria = $this->_parseSearchCriteria();
     
-    if (!$category->getId()) {
-        $this->_helper->sendErrorResponse('Category not found', 404);
-        return;
-    }
+        $collection = Mage::getModel('sales/order_shipment')->getCollection();
 
-    $data = $this->_helper->getRequestBody();
+        // Apply filters
+        if (isset($searchCriteria['filters'])) {
+            foreach ($searchCriteria['filters'] as $filter) {
+                $field = $filter['field'];
+                $value = $filter['value'];
+                $condition = isset($filter['condition_type']) ? $filter['condition_type'] : 'eq';
+                $collection->addFieldToFilter($field, array($condition => $value));
+            }
+        }
+
+        // Apply pagination
+        $pageSize = isset($searchCriteria['page_size']) ? $searchCriteria['page_size'] : 20;
+        $currentPage = isset($searchCriteria['current_page']) ? $searchCriteria['current_page'] : 1;
     
-    if (!isset($data['category'])) {
-        $this->_helper->sendErrorResponse('Category data is required', 400);
-        return;
+        $collection->setPageSize($pageSize);
+        $collection->setCurPage($currentPage);
+
+        $items = array();
+        foreach ($collection as $shipment) {
+            $items[] = $this->_formatShipment($shipment);
+        }
+
+        $result = array(
+            'items' => $items,
+            'search_criteria' => $searchCriteria,
+            'total_count' => $collection->getSize()
+        );
+
+        $this->_helper->sendJsonResponse($result, 200);
     }
 
-    $categoryData = $data['category'];
+    protected function _getShipment($shipmentId)
+    {
+        $authData = $this->_validateAuth(true);
+        if (!$authData) return;
 
-    try {
-        if (isset($categoryData['name'])) $category->setName($categoryData['name']);
-        if (isset($categoryData['is_active'])) $category->setIsActive($categoryData['is_active']);
-        if (isset($categoryData['position'])) $category->setPosition($categoryData['position']);
-        if (isset($categoryData['include_in_menu'])) $category->setIncludeInMenu($categoryData['include_in_menu']);
+        $shipment = Mage::getModel('sales/order_shipment')->load($shipmentId);
+    
+        if (!$shipment->getId()) {
+            $this->_helper->sendErrorResponse('Shipment not found', 404);
+            return;
+        }
+
+        $this->_helper->sendJsonResponse($this->_formatShipment($shipment), 200);
+    }
+
+    protected function _createShipment()
+    {
+        $authData = $this->_validateAuth(true);
+        if (!$authData) return;
+
+        $data = $this->_helper->getRequestBody();
+    
+        if (!isset($data['orderId'])) {
+            $this->_helper->sendErrorResponse('Order ID is required', 400);
+            return;
+        }
+
+        try {
+            $order = Mage::getModel('sales/order')->load($data['orderId']);
         
-        $category->save();
+            if (!$order->getId()) {
+                $this->_helper->sendErrorResponse('Order not found', 404);
+                return;
+            }
+
+            if (!$order->canShip()) {
+                $this->_helper->sendErrorResponse('Cannot create shipment for this order', 400);
+                return;
+            }
+
+            $shipment = Mage::getModel('sales/service_order', $order)->prepareShipment();
+            $shipment->register();
+        
+            // Add tracking if provided
+            if (isset($data['tracks']) && is_array($data['tracks'])) {
+                foreach ($data['tracks'] as $trackData) {
+                    $track = Mage::getModel('sales/order_shipment_track')
+                        ->setNumber($trackData['track_number'])
+                        ->setCarrierCode($trackData['carrier_code'])
+                        ->setTitle($trackData['title']);
+                    $shipment->addTrack($track);
+                }
+            }
+        
+            $transactionSave = Mage::getModel('core/resource_transaction')
+                ->addObject($shipment)
+                ->addObject($shipment->getOrder())
+                ->save();
+
+            $this->_helper->sendJsonResponse($this->_formatShipment($shipment), 201);
+        } catch (Exception $e) {
+            Mage::logException($e);
+            $this->_helper->sendErrorResponse($e->getMessage(), 500);
+        }
+    }
+
+    protected function _formatShipment($shipment)
+    {
+        $data = array(
+            'entity_id' => (int)$shipment->getId(),
+            'increment_id' => $shipment->getIncrementId(),
+            'order_id' => (int)$shipment->getOrderId(),
+            'store_id' => (int)$shipment->getStoreId(),
+            'total_qty' => (float)$shipment->getTotalQty(),
+            'created_at' => $shipment->getCreatedAt(),
+            'updated_at' => $shipment->getUpdatedAt(),
+            'items' => array(),
+            'tracks' => array()
+        );
+
+        foreach ($shipment->getAllItems() as $item) {
+            $data['items'][] = array(
+                'entity_id' => (int)$item->getId(),
+                'order_item_id' => (int)$item->getOrderItemId(),
+                'sku' => $item->getSku(),
+                'name' => $item->getName(),
+                'qty' => (float)$item->getQty()
+            );
+        }
+
+        foreach ($shipment->getAllTracks() as $track) {
+            $data['tracks'][] = array(
+                'entity_id' => (int)$track->getId(),
+                'track_number' => $track->getNumber(),
+                'carrier_code' => $track->getCarrierCode(),
+                'title' => $track->getTitle()
+            );
+        }
+
+        return $data;
+    }
+
+    // CATEGORY METHODS
+
+    protected function _getCategories()
+    {
+        $authData = $this->_validateAuth();
+        if (!$authData) return;
+
+        $searchCriteria = $this->_parseSearchCriteria();
+    
+        $collection = Mage::getModel('catalog/category')->getCollection()
+            ->addAttributeToSelect('*');
+
+        // Apply filters
+        if (isset($searchCriteria['filters'])) {
+            foreach ($searchCriteria['filters'] as $filter) {
+                $field = $filter['field'];
+                $value = $filter['value'];
+                $condition = isset($filter['condition_type']) ? $filter['condition_type'] : 'eq';
+                $collection->addAttributeToFilter($field, array($condition => $value));
+            }
+        }
+
+        // Apply pagination
+        $pageSize = isset($searchCriteria['page_size']) ? $searchCriteria['page_size'] : 20;
+        $currentPage = isset($searchCriteria['current_page']) ? $searchCriteria['current_page'] : 1;
+    
+        $collection->setPageSize($pageSize);
+        $collection->setCurPage($currentPage);
+
+        $items = array();
+        foreach ($collection as $category) {
+            $items[] = $this->_formatCategory($category);
+        }
+
+        $result = array(
+            'items' => $items,
+            'search_criteria' => $searchCriteria,
+            'total_count' => $collection->getSize()
+        );
+
+        $this->_helper->sendJsonResponse($result, 200);
+    }
+
+    protected function _getCategory($categoryId)
+    {
+        $authData = $this->_validateAuth();
+        if (!$authData) return;
+
+        $category = Mage::getModel('catalog/category')->load($categoryId);
+    
+        if (!$category->getId()) {
+            $this->_helper->sendErrorResponse('Category not found', 404);
+            return;
+        }
 
         $this->_helper->sendJsonResponse($this->_formatCategory($category), 200);
-    } catch (Exception $e) {
-        Mage::logException($e);
-        $this->_helper->sendErrorResponse($e->getMessage(), 500);
     }
-}
 
-protected function _deleteCategory($categoryId)
-{
-    $authData = $this->_validateAuth(true);
-    if (!$authData) return;
+    protected function _formatCategory($category)
+    {
+        return array(
+            'id' => (int)$category->getId(),
+            'parent_id' => (int)$category->getParentId(),
+            'name' => $category->getName(),
+            'is_active' => (bool)$category->getIsActive(),
+            'position' => (int)$category->getPosition(),
+            'level' => (int)$category->getLevel(),
+            'children' => $category->getChildren(),
+            'created_at' => $category->getCreatedAt(),
+            'updated_at' => $category->getUpdatedAt(),
+            'path' => $category->getPath(),
+            'include_in_menu' => (bool)$category->getIncludeInMenu(),
+            'custom_attributes' => array()
+        );
+    }
 
-    $category = Mage::getModel('catalog/category')->load($categoryId);
+    protected function _createCategory()
+    {
+        $authData = $this->_validateAuth(true);
+        if (!$authData) return;
+
+        $data = $this->_helper->getRequestBody();
     
-    if (!$category->getId()) {
-        $this->_helper->sendErrorResponse('Category not found', 404);
-        return;
+        if (!isset($data['category'])) {
+            $this->_helper->sendErrorResponse('Category data is required', 400);
+            return;
+        }
+
+        $categoryData = $data['category'];
+
+        try {
+            $category = Mage::getModel('catalog/category');
+            $category->setName($categoryData['name']);
+            $category->setIsActive(isset($categoryData['is_active']) ? $categoryData['is_active'] : 1);
+            $category->setParentId(isset($categoryData['parent_id']) ? $categoryData['parent_id'] : 2);
+            $category->setIncludeInMenu(isset($categoryData['include_in_menu']) ? $categoryData['include_in_menu'] : 1);
+        
+            if (isset($categoryData['position'])) {
+                $category->setPosition($categoryData['position']);
+            }
+        
+            $category->save();
+
+            $this->_helper->sendJsonResponse($this->_formatCategory($category), 201);
+        } catch (Exception $e) {
+            Mage::logException($e);
+            $this->_helper->sendErrorResponse($e->getMessage(), 500);
+        }
     }
 
-    try {
-        $category->delete();
-        $this->_helper->sendJsonResponse(true, 200);
-    } catch (Exception $e) {
-        Mage::logException($e);
-        $this->_helper->sendErrorResponse($e->getMessage(), 500);
+    protected function _updateCategory($categoryId)
+    {
+        $authData = $this->_validateAuth(true);
+        if (!$authData) return;
+
+        $category = Mage::getModel('catalog/category')->load($categoryId);
+    
+        if (!$category->getId()) {
+            $this->_helper->sendErrorResponse('Category not found', 404);
+            return;
+        }
+
+        $data = $this->_helper->getRequestBody();
+    
+        if (!isset($data['category'])) {
+            $this->_helper->sendErrorResponse('Category data is required', 400);
+            return;
+        }
+
+        $categoryData = $data['category'];
+
+        try {
+            if (isset($categoryData['name'])) $category->setName($categoryData['name']);
+            if (isset($categoryData['is_active'])) $category->setIsActive($categoryData['is_active']);
+            if (isset($categoryData['position'])) $category->setPosition($categoryData['position']);
+            if (isset($categoryData['include_in_menu'])) $category->setIncludeInMenu($categoryData['include_in_menu']);
+        
+            $category->save();
+
+            $this->_helper->sendJsonResponse($this->_formatCategory($category), 200);
+        } catch (Exception $e) {
+            Mage::logException($e);
+            $this->_helper->sendErrorResponse($e->getMessage(), 500);
+        }
     }
-}
+
+    protected function _deleteCategory($categoryId)
+    {
+        $authData = $this->_validateAuth(true);
+        if (!$authData) return;
+
+        $category = Mage::getModel('catalog/category')->load($categoryId);
+    
+        if (!$category->getId()) {
+            $this->_helper->sendErrorResponse('Category not found', 404);
+            return;
+        }
+
+        try {
+            $category->delete();
+            $this->_helper->sendJsonResponse(true, 200);
+        } catch (Exception $e) {
+            Mage::logException($e);
+            $this->_helper->sendErrorResponse($e->getMessage(), 500);
+        }
+    }
 }
