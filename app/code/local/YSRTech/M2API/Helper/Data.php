@@ -2,6 +2,32 @@
 // app/code/local/YSRTech/M2API/Helper/Data.php
 class YSRTech_M2API_Helper_Data extends Mage_Core_Helper_Abstract
 {
+    const XML_PATH_LOGGING_ENABLED = 'ysrtech_m2api/logging/enabled';
+
+    /**
+     * Debug logging is off by default (System > Configuration > M2 API > Logging).
+     *
+     * @return bool
+     */
+    public function isLoggingEnabled()
+    {
+        return Mage::getStoreConfigFlag(self::XML_PATH_LOGGING_ENABLED);
+    }
+
+    /**
+     * Write to one of the module's log files, but only when logging is enabled.
+     *
+     * @param string $message
+     * @param string $file
+     */
+    public function log($message, $file = 'm2api.log')
+    {
+        if (!$this->isLoggingEnabled()) {
+            return;
+        }
+        Mage::log($message, null, $file, true);
+    }
+
     /**
      * Returns a direct tracking URL for the given carrier code and tracking number.
      * Used in frontend, adminhtml, and email templates.
@@ -38,6 +64,10 @@ class YSRTech_M2API_Helper_Data extends Mage_Core_Helper_Abstract
 
     public function logRequest(Zend_Controller_Request_Http $request)
     {
+        if (!$this->isLoggingEnabled()) {
+            return;
+        }
+
         $entry = array(
             'timestamp' => date('c'),
             'method'    => $request->getMethod(),
@@ -45,6 +75,6 @@ class YSRTech_M2API_Helper_Data extends Mage_Core_Helper_Abstract
             'body'      => $request->getRawBody(),
         );
 
-        Mage::log(json_encode($entry, JSON_PRETTY_PRINT), null, 'm2api.log', true);
+        $this->log(json_encode($entry, JSON_PRETTY_PRINT), 'm2api.log');
     }
 }

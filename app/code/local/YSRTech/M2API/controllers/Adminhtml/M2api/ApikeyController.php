@@ -228,7 +228,7 @@ class YSRTech_M2API_Adminhtml_M2api_ApikeyController extends Mage_Adminhtml_Cont
         return $value . ' 23:59:59';
     }
 
-    protected function _isAllowed()
+    protected function _isAllowed(): bool
     {
         return Mage::getSingleton('admin/session')->isAllowed('system/ysrtech_m2api');
     }
