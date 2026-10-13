@@ -49,6 +49,18 @@ class YSRTech_M2API_Model_Adapter_Shipment extends YSRTech_M2API_Model_Adapter_A
         return $this->toArray($shipment);
     }
 
+    /**
+     * One track on its own, the way M2 returns ShipmentTrackInterface from
+     * the track repository's save.
+     *
+     * @param  Mage_Sales_Model_Order_Shipment_Track $track
+     * @return array
+     */
+    public function trackToArray(Mage_Sales_Model_Order_Shipment_Track $track)
+    {
+        return $this->export($track, $this->trackFields());
+    }
+
     protected function shipmentFields()
     {
         return $this->typed(

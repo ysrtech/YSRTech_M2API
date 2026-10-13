@@ -142,6 +142,20 @@ class YSRTech_M2API_RestController extends Mage_Core_Controller_Front_Action
             return $this->shipmentsSearchAction();
         }
 
+        // Route: /rest/V1/shipment/track (POST) - admin only
+        // Declared before shipment/:id, though they cannot collide: that route
+        // requires a numeric second segment and this one is the word "track".
+        if ($this->match($restPath, array('shipment', 'track')) && $method === 'POST') {
+            return $this->shipmentTrackAddAction();
+        }
+
+        // Route: /rest/V1/shipment/track/:id (DELETE) - admin only
+        if (count($restPath) == 3 && $restPath[0] === 'shipment' && $restPath[1] === 'track'
+            && is_numeric($restPath[2]) && $method === 'DELETE'
+        ) {
+            return $this->shipmentTrackDeleteAction($restPath[2]);
+        }
+
         // Route: /rest/V1/shipment/:id (GET)
         if (count($restPath) == 2 && $restPath[0] === 'shipment' && is_numeric($restPath[1]) && $method === 'GET') {
             return $this->shipmentGetAction($restPath[1]);
@@ -627,6 +641,151 @@ class YSRTech_M2API_RestController extends Mage_Core_Controller_Front_Action
 
         $payload = Mage::getModel('ysrtech_m2api/adapter_shipment')->toArray($shipment);
         return $this->json($payload);
+    }
+
+    /**
+     * POST /rest/V1/shipment/track  (Magento\Shipping\Api\ShipmentTrackRepositoryInterface::save)
+     *
+     * Adds a tracking number to a shipment that already exists. This is the
+     * call a shipping platform makes when the label is bought after the
+     * shipment record - the tracks array on /order/:id/ship only covers the
+     * case where both happen at once, which is why a carrier integration can
+     * create shipments here perfectly well and never manage to attach a
+     * tracking number.
+     *
+     * Body, as M2 sends it:
+     *   {"entity": {"order_id": 5, "parent_id": 3, "track_number": "...",
+     *               "title": "UPS", "carrier_code": "ups"}}
+     *
+     * parent_id is the shipment's entity_id. A bare object without the
+     * "entity" wrapper is accepted too, because not every client sends it.
+     *
+     * Returns the saved track, as M2 returns ShipmentTrackInterface.
+     */
+    public function shipmentTrackAddAction()
+    {
+        if (!$this->requireAdmin()) {
+            return;
+        }
+
+        $data = $this->getJsonBody();
+        $entity = isset($data['entity']) && is_array($data['entity']) ? $data['entity'] : $data;
+
+        $number = isset($entity['track_number']) ? trim((string)$entity['track_number']) : '';
+        if ($number === '') {
+            return $this->jsonError(400, 'Tracking Document Validation Error(s):\nEnter a tracking number.');
+        }
+
+        $shipment = $this->loadShipmentForTrack($entity);
+        if (!$shipment) {
+            return $this->jsonError(
+                400,
+                "Tracking Document Validation Error(s):\nNo shipment was found to attach this tracking number to. "
+                . 'Create the shipment first with POST /V1/order/:orderId/ship, or send parent_id for an existing one.'
+            );
+        }
+
+        $carrier = isset($entity['carrier_code']) ? strtolower(trim((string)$entity['carrier_code'])) : '';
+        $title = isset($entity['title']) ? trim((string)$entity['title']) : '';
+
+        try {
+            /** @var Mage_Sales_Model_Order_Shipment_Track $track */
+            $track = Mage::getModel('sales/order_shipment_track')
+                ->setNumber($number)
+                ->setCarrierCode($carrier !== '' ? $carrier : 'custom')
+                // M1 shows the title in the admin and in the shipment email; an
+                // empty one leaves the customer a bare number with no carrier
+                ->setTitle($title !== '' ? $title : ($carrier !== '' ? $carrier : 'custom'));
+
+            if (isset($entity['description'])) {
+                $track->setDescription((string)$entity['description']);
+            }
+
+            // addTrack sets parent_id and order_id from the shipment, which is
+            // why it is used rather than setting them from the request body:
+            // a mismatched order_id would otherwise be stored verbatim
+            $shipment->addTrack($track);
+            $track->save();
+
+            return $this->json(Mage::getModel('ysrtech_m2api/adapter_shipment')->trackToArray($track));
+        } catch (Mage_Core_Exception $e) {
+            return $this->jsonError(400, $e->getMessage());
+        } catch (Exception $e) {
+            Mage::logException($e);
+            return $this->jsonError(500, 'Could not save the tracking number, see error log for details');
+        }
+    }
+
+    /**
+     * DELETE /rest/V1/shipment/track/:id
+     *   (Magento\Shipping\Api\ShipmentTrackRepositoryInterface::deleteById)
+     *
+     * Returns true, as M2 does.
+     */
+    public function shipmentTrackDeleteAction($trackId)
+    {
+        if (!$this->requireAdmin()) {
+            return;
+        }
+
+        /** @var Mage_Sales_Model_Order_Shipment_Track $track */
+        $track = Mage::getModel('sales/order_shipment_track')->load((int)$trackId);
+
+        if (!$track->getId()) {
+            return $this->jsonError(404, "The entity that was requested doesn't exist. Verify the entity and try again.");
+        }
+
+        try {
+            $track->delete();
+            return $this->json(true);
+        } catch (Exception $e) {
+            Mage::logException($e);
+            return $this->jsonError(500, 'Could not delete the tracking number, see error log for details');
+        }
+    }
+
+    /**
+     * Find the shipment a posted track belongs to.
+     *
+     * parent_id is what M2 means, and is used when given. order_id is a
+     * fallback for clients that know the order but not the shipment: it takes
+     * that order's most recent shipment.
+     *
+     * No shipment is ever created here. A tracking number arriving for an
+     * unshipped order is a question - ship everything? only what the carrier
+     * took? - and answering it silently would decrement stock and email the
+     * customer off the back of a call that only claimed to record a number.
+     *
+     * @param  array $entity
+     * @return Mage_Sales_Model_Order_Shipment|null
+     */
+    protected function loadShipmentForTrack(array $entity)
+    {
+        $parentId = isset($entity['parent_id']) ? (int)$entity['parent_id'] : 0;
+
+        if ($parentId) {
+            $shipment = Mage::getModel('sales/order_shipment')->load($parentId);
+            return $shipment->getId() ? $shipment : null;
+        }
+
+        $orderId = isset($entity['order_id']) ? $entity['order_id'] : null;
+
+        if ($orderId === null || $orderId === '') {
+            return null;
+        }
+
+        $order = $this->loadOrder($orderId);
+
+        if (!$order) {
+            return null;
+        }
+
+        $shipment = $order->getShipmentsCollection()
+            ->setOrder('entity_id', 'DESC')
+            ->setPageSize(1)
+            ->getFirstItem();
+
+        return $shipment->getId() ? $shipment : null;
     }
 
     // --- Utilities ---
