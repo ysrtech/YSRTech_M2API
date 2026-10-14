@@ -142,6 +142,20 @@ class YSRTech_M2API_RestController extends Mage_Core_Controller_Front_Action
             return $this->shipmentsSearchAction();
         }
 
+        // Route: /rest/V1/shipment/track (POST) - admin only
+        // Declared before shipment/:id, though they cannot collide: that route
+        // requires a numeric second segment and this one is the word "track".
+        if ($this->match($restPath, array('shipment', 'track')) && $method === 'POST') {
+            return $this->shipmentTrackAddAction();
+        }
+
+        // Route: /rest/V1/shipment/track/:id (DELETE) - admin only
+        if (count($restPath) == 3 && $restPath[0] === 'shipment' && $restPath[1] === 'track'
+            && is_numeric($restPath[2]) && $method === 'DELETE'
+        ) {
+            return $this->shipmentTrackDeleteAction($restPath[2]);
+        }
+
         // Route: /rest/V1/shipment/:id (GET)
         if (count($restPath) == 2 && $restPath[0] === 'shipment' && is_numeric($restPath[1]) && $method === 'GET') {
             return $this->shipmentGetAction($restPath[1]);
@@ -435,9 +449,9 @@ class YSRTech_M2API_RestController extends Mage_Core_Controller_Front_Action
         }
 
         $data = $this->getJsonBody();
-        $capture = isset($data['capture']) && $this->toBool($data['capture']);
-        $notify = isset($data['notify']) && $this->toBool($data['notify']);
-        $appendComment = isset($data['appendComment']) && $this->toBool($data['appendComment']);
+        $capture = $this->toBool($this->field($data, 'capture'));
+        $notify = $this->toBool($this->field($data, 'notify'));
+        $appendComment = $this->toBool($this->field($data, 'appendComment'));
         list($commentText, $commentVisible) = $this->parseComment($data);
 
         try {
@@ -445,7 +459,7 @@ class YSRTech_M2API_RestController extends Mage_Core_Controller_Front_Action
             if (!$order->canInvoice()) {
                 $errors[] = 'The order does not allow an invoice to be created.';
             }
-            $qtys = $this->buildQtys($order, isset($data['items']) ? $data['items'] : array(), 'invoice', $errors);
+            $qtys = $this->buildQtys($order, $this->field($data, 'items', array()), 'invoice', $errors);
             if ($errors) {
                 return $this->jsonError(400, "Invoice Document Validation Error(s):\n" . implode("\n", $errors));
             }
@@ -517,8 +531,8 @@ class YSRTech_M2API_RestController extends Mage_Core_Controller_Front_Action
         }
 
         $data = $this->getJsonBody();
-        $notify = isset($data['notify']) && $this->toBool($data['notify']);
-        $appendComment = isset($data['appendComment']) && $this->toBool($data['appendComment']);
+        $notify = $this->toBool($this->field($data, 'notify'));
+        $appendComment = $this->toBool($this->field($data, 'appendComment'));
         list($commentText, $commentVisible) = $this->parseComment($data);
 
         try {
@@ -526,7 +540,7 @@ class YSRTech_M2API_RestController extends Mage_Core_Controller_Front_Action
             if (!$order->canShip()) {
                 $errors[] = sprintf('A shipment cannot be created when an order has a status of %s', $order->getStatus());
             }
-            $qtys = $this->buildQtys($order, isset($data['items']) ? $data['items'] : array(), 'ship', $errors);
+            $qtys = $this->buildQtys($order, $this->field($data, 'items', array()), 'ship', $errors);
             if ($errors) {
                 return $this->jsonError(400, "Shipment Document Validation Error(s):\n" . implode("\n", $errors));
             }
@@ -537,14 +551,19 @@ class YSRTech_M2API_RestController extends Mage_Core_Controller_Front_Action
                 return $this->jsonError(400, "Shipment Document Validation Error(s):\nYou can't create a shipment without products.");
             }
 
-            if (!empty($data['tracks']) && is_array($data['tracks'])) {
-                foreach ($data['tracks'] as $trackData) {
-                    $number = isset($trackData['track_number']) ? trim((string)$trackData['track_number']) : '';
+            $tracks = $this->field($data, 'tracks', array());
+            if (!empty($tracks) && is_array($tracks)) {
+                foreach ($tracks as $trackData) {
+                    if (!is_array($trackData)) {
+                        continue;
+                    }
+                    $number = trim((string)$this->field($trackData, 'track_number', ''));
                     if ($number === '') {
                         continue;
                     }
-                    $carrier = isset($trackData['carrier_code']) ? strtolower(trim((string)$trackData['carrier_code'])) : 'custom';
-                    $title = isset($trackData['title']) && $trackData['title'] !== '' ? $trackData['title'] : $carrier;
+                    $carrier = strtolower(trim((string)$this->field($trackData, 'carrier_code', 'custom')));
+                    $title = trim((string)$this->field($trackData, 'title', ''));
+                    $title = $title !== '' ? $title : ($carrier !== '' ? $carrier : 'custom');
                     $shipment->addTrack(
                         Mage::getModel('sales/order_shipment_track')
                             ->setNumber($number)
@@ -629,6 +648,155 @@ class YSRTech_M2API_RestController extends Mage_Core_Controller_Front_Action
         return $this->json($payload);
     }
 
+    /**
+     * POST /rest/V1/shipment/track  (Magento\Shipping\Api\ShipmentTrackRepositoryInterface::save)
+     *
+     * Adds a tracking number to a shipment that already exists. This is the
+     * call a shipping platform makes when the label is bought after the
+     * shipment record - the tracks array on /order/:id/ship only covers the
+     * case where both happen at once, which is why a carrier integration can
+     * create shipments here perfectly well and never manage to attach a
+     * tracking number.
+     *
+     * Body, as M2 sends it:
+     *   {"entity": {"order_id": 5, "parent_id": 3, "track_number": "...",
+     *               "title": "UPS", "carrier_code": "ups"}}
+     *
+     * parent_id is the shipment's entity_id. A bare object without the
+     * "entity" wrapper is accepted too, because not every client sends it.
+     *
+     * Returns the saved track, as M2 returns ShipmentTrackInterface.
+     */
+    public function shipmentTrackAddAction()
+    {
+        if (!$this->requireAdmin()) {
+            return;
+        }
+
+        $data = $this->getJsonBody();
+        $entity = $this->field($data, 'entity');
+        if (!is_array($entity)) {
+            $entity = $data;
+        }
+
+        $number = trim((string)$this->field($entity, 'track_number', ''));
+        if ($number === '') {
+            return $this->jsonError(400, 'Tracking Document Validation Error(s):\nEnter a tracking number.');
+        }
+
+        $shipment = $this->loadShipmentForTrack($entity);
+        if (!$shipment) {
+            return $this->jsonError(
+                400,
+                "Tracking Document Validation Error(s):\nNo shipment was found to attach this tracking number to. "
+                . 'Create the shipment first with POST /V1/order/:orderId/ship, or send parent_id for an existing one.'
+            );
+        }
+
+        $carrier = strtolower(trim((string)$this->field($entity, 'carrier_code', '')));
+        $title = trim((string)$this->field($entity, 'title', ''));
+
+        try {
+            /** @var Mage_Sales_Model_Order_Shipment_Track $track */
+            $track = Mage::getModel('sales/order_shipment_track')
+                ->setNumber($number)
+                ->setCarrierCode($carrier !== '' ? $carrier : 'custom')
+                // M1 shows the title in the admin and in the shipment email; an
+                // empty one leaves the customer a bare number with no carrier
+                ->setTitle($title !== '' ? $title : ($carrier !== '' ? $carrier : 'custom'));
+
+            $description = $this->field($entity, 'description');
+            if ($description !== null) {
+                $track->setDescription((string)$description);
+            }
+
+            // addTrack sets parent_id and order_id from the shipment, which is
+            // why it is used rather than setting them from the request body:
+            // a mismatched order_id would otherwise be stored verbatim
+            $shipment->addTrack($track);
+            $track->save();
+
+            return $this->json(Mage::getModel('ysrtech_m2api/adapter_shipment')->trackToArray($track));
+        } catch (Mage_Core_Exception $e) {
+            return $this->jsonError(400, $e->getMessage());
+        } catch (Exception $e) {
+            Mage::logException($e);
+            return $this->jsonError(500, 'Could not save the tracking number, see error log for details');
+        }
+    }
+
+    /**
+     * DELETE /rest/V1/shipment/track/:id
+     *   (Magento\Shipping\Api\ShipmentTrackRepositoryInterface::deleteById)
+     *
+     * Returns true, as M2 does.
+     */
+    public function shipmentTrackDeleteAction($trackId)
+    {
+        if (!$this->requireAdmin()) {
+            return;
+        }
+
+        /** @var Mage_Sales_Model_Order_Shipment_Track $track */
+        $track = Mage::getModel('sales/order_shipment_track')->load((int)$trackId);
+
+        if (!$track->getId()) {
+            return $this->jsonError(404, "The entity that was requested doesn't exist. Verify the entity and try again.");
+        }
+
+        try {
+            $track->delete();
+            return $this->json(true);
+        } catch (Exception $e) {
+            Mage::logException($e);
+            return $this->jsonError(500, 'Could not delete the tracking number, see error log for details');
+        }
+    }
+
+    /**
+     * Find the shipment a posted track belongs to.
+     *
+     * parent_id is what M2 means, and is used when given. order_id is a
+     * fallback for clients that know the order but not the shipment: it takes
+     * that order's most recent shipment.
+     *
+     * No shipment is ever created here. A tracking number arriving for an
+     * unshipped order is a question - ship everything? only what the carrier
+     * took? - and answering it silently would decrement stock and email the
+     * customer off the back of a call that only claimed to record a number.
+     *
+     * @param  array $entity
+     * @return Mage_Sales_Model_Order_Shipment|null
+     */
+    protected function loadShipmentForTrack(array $entity)
+    {
+        $parentId = (int)$this->field($entity, 'parent_id', 0);
+
+        if ($parentId) {
+            $shipment = Mage::getModel('sales/order_shipment')->load($parentId);
+            return $shipment->getId() ? $shipment : null;
+        }
+
+        $orderId = $this->field($entity, 'order_id');
+
+        if ($orderId === null || $orderId === '') {
+            return null;
+        }
+
+        $order = $this->loadOrder($orderId);
+
+        if (!$order) {
+            return null;
+        }
+
+        $shipment = $order->getShipmentsCollection()
+            ->setOrder('entity_id', 'DESC')
+            ->setPageSize(1)
+            ->getFirstItem();
+
+        return $shipment->getId() ? $shipment : null;
+    }
+
     // --- Utilities ---
 
     /**
@@ -682,8 +850,11 @@ class YSRTech_M2API_RestController extends Mage_Core_Controller_Front_Action
 
         $totalQty = 0;
         foreach ($items as $itemData) {
-            $itemId = isset($itemData['order_item_id']) ? (int)$itemData['order_item_id'] : 0;
-            $qty = isset($itemData['qty']) ? (float)$itemData['qty'] : 0;
+            if (!is_array($itemData)) {
+                continue;
+            }
+            $itemId = (int)$this->field($itemData, 'order_item_id', 0);
+            $qty = (float)$this->field($itemData, 'qty', 0);
             if (!isset($orderItems[$itemId])) {
                 $errors[] = $mode === 'invoice'
                     ? 'The invoice contains one or more items that are not part of the original order.'
@@ -752,8 +923,9 @@ class YSRTech_M2API_RestController extends Mage_Core_Controller_Front_Action
                 }
                 $field = (string)$filter['field'];
                 $value = isset($filter['value']) ? $filter['value'] : null;
-                if (isset($valueMappers[$field])) {
-                    list($field, $value) = call_user_func($valueMappers[$field], $value);
+                $mapper = $this->mapperFor($valueMappers, $field);
+                if ($mapper) {
+                    list($field, $value) = call_user_func($mapper, $value);
                 }
                 $type = !empty($filter['condition_type']) ? strtolower((string)$filter['condition_type']) : 'eq';
                 $condition = $this->buildFilterCondition($type, $value);
@@ -851,17 +1023,80 @@ class YSRTech_M2API_RestController extends Mage_Core_Controller_Front_Action
      */
     protected function parseComment(array $data)
     {
-        if (empty($data['comment']) || !is_array($data['comment'])) {
+        $comment = $this->field($data, 'comment');
+        if (empty($comment) || !is_array($comment)) {
             return array('', false);
         }
-        $text = isset($data['comment']['comment']) ? trim((string)$data['comment']['comment']) : '';
-        $visible = isset($data['comment']['is_visible_on_front']) && $this->toBool($data['comment']['is_visible_on_front']);
+        $text = trim((string)$this->field($comment, 'comment', ''));
+        $visible = $this->toBool($this->field($comment, 'is_visible_on_front'));
         return array($text, $visible);
     }
 
     protected function toBool($value)
     {
         return filter_var($value, FILTER_VALIDATE_BOOLEAN);
+    }
+
+    /**
+     * Read a request-body field, accepting either spelling of its name.
+     *
+     * Magento 2 does not care which one a client sends: its
+     * SimpleDataObjectConverter::snakeCaseToUpperCamelCase() strips the
+     * underscores before building the setter name, so "order_item_id" and
+     * "orderItemId" both end up calling setOrderItemId(). Clients written
+     * against a real M2 install therefore send whichever they please --
+     * ClickShip, for one, sends camelCase -- and a snake_case-only read here
+     * silently loses the value, which for shipment items means every line
+     * looks like it is not part of the order.
+     *
+     * @param  array  $data
+     * @param  string $key     the field name in either spelling
+     * @param  mixed  $default returned when no spelling of $key is present
+     * @return mixed
+     */
+    protected function field(array $data, $key, $default = null)
+    {
+        if (isset($data[$key])) {
+            return $data[$key];
+        }
+        foreach (array($this->toCamelCase($key), $this->toSnakeCase($key)) as $alias) {
+            if ($alias !== $key && isset($data[$alias])) {
+                return $data[$alias];
+            }
+        }
+        return $default;
+    }
+
+    /** order_item_id => orderItemId */
+    protected function toCamelCase($key)
+    {
+        return lcfirst(str_replace('_', '', ucwords((string)$key, '_')));
+    }
+
+    /** orderItemId => order_item_id */
+    protected function toSnakeCase($key)
+    {
+        return strtolower(preg_replace('/([a-z0-9])([A-Z])/', '$1_$2', (string)$key));
+    }
+
+    /**
+     * Find the value mapper for a searchCriteria field.
+     *
+     * The mappers are keyed by snake_case field name, but clients spell the
+     * field however they please -- ClickShip asks for "order_Id". MySQL is
+     * case-insensitive about column names, so the filter itself still works;
+     * a mapper keyed on an exact string would just quietly not run, and with
+     * it the increment_id-to-entity_id translation it exists for.
+     *
+     * @return callable|null
+     */
+    protected function mapperFor(array $valueMappers, $field)
+    {
+        if (isset($valueMappers[$field])) {
+            return $valueMappers[$field];
+        }
+        $snake = $this->toSnakeCase($field);
+        return isset($valueMappers[$snake]) ? $valueMappers[$snake] : null;
     }
 
     /**
